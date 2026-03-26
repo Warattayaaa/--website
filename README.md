@@ -315,7 +315,7 @@ erDiagram
 
 ```mermaid
 graph TD
-    User((👩‍💻 ผู้ใช้/ช่าง/แอดมิน)) -- Access --> Web[SPA Frontend]
+    User((👩‍💻 ผู้ใช้/ช่าง/แอดมิน)) -- Access --> Web[Frontend]
     Web -- HTTPS/JWT --> API[Express.js on Cloud Functions]
     API -- Admin SDK --> DB[(Google Firestore)]
     API -- Admin SDK --> Storage[Firebase Storage]
