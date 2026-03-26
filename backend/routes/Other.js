@@ -40,6 +40,30 @@ materialRouter.post('/', authenticate, authorize('admin','manager'), async (req,
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+materialRouter.delete('/:id', authenticate, authorize('admin','manager'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ref = db.collection('materials').doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'ไม่พบข้อมูลวัสดุ' });
+
+    const matData = doc.data();
+    await ref.delete();
+
+    // Log action
+    await db.collection('audit_logs').add({
+      user_id: String(req.user.id), 
+      action: 'DELETE_MATERIAL', 
+      target_table: 'materials', 
+      target_id: id,
+      detail: `ลบวัสดุ: ${matData.name} (${matData.code || 'ไม่มีรหัส'})`, 
+      created_at: Timestamp.now()
+    });
+
+    res.json({ message: 'ลบวัสดุสำเร็จ' });
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
 materialRouter.post('/:id/stock-in', authenticate, authorize('admin','manager','technician'), async (req, res) => {
   try {
     const qty = Number(req.body.quantity);
@@ -458,144 +482,7 @@ reportRouter.get('/summary', authenticate, authorize('manager','admin'), async (
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
-/* ====== PURCHASE ORDERS (SRS 2.6.2-2.6.3) ====== */
-const poRouter = express.Router();
-
-function genPOCode() {
-  const d = new Date();
-  return `PO-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}-${String(Math.floor(Math.random()*9000)+1000)}`;
-}
-
-// List all POs
-poRouter.get('/', authenticate, authorize('admin','manager','technician'), async (req, res) => {
-  try {
-    const snap = await db.collection('purchase_orders').orderBy('created_at','desc').get();
-    const items = snap.docs.map(d => {
-      const po = { id: d.id, ...d.data() };
-      if(po.created_at?.toDate) po.created_at = po.created_at.toDate().toISOString();
-      if(po.received_at?.toDate) po.received_at = po.received_at.toDate().toISOString();
-      if(po.expected_date?.toDate) po.expected_date = po.expected_date.toDate().toISOString();
-      return po;
-    });
-    res.json({ items, total: items.length });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Create PO
-poRouter.post('/', authenticate, authorize('admin','manager'), async (req, res) => {
-  try {
-    const { supplier, items, expected_date, note } = req.body;
-    if(!supplier || !items?.length) return res.status(400).json({error:'กรุณากรอกข้อมูล Supplier และรายการวัสดุ'});
-    const total_amount = items.reduce((s, i) => s + (Number(i.unit_price||0) * Number(i.quantity||0)), 0);
-    const ref = db.collection('purchase_orders').doc();
-    const po = {
-      id: ref.id,
-      code: genPOCode(),
-      supplier,
-      items,
-      total_amount,
-      status: 'รออนุมัติ',
-      note: note || '',
-      created_by: String(req.user.id),
-      expected_date: expected_date ? Timestamp.fromDate(new Date(expected_date)) : null,
-      created_at: Timestamp.now(),
-      received_at: null
-    };
-    await ref.set(po);
-    res.status(201).json({ message:'สร้างใบจัดซื้อสำเร็จ', id: ref.id, code: po.code });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Approve PO
-poRouter.patch('/:id/approve', authenticate, authorize('admin','manager'), async (req, res) => {
-  try {
-    const ref = db.collection('purchase_orders').doc(req.params.id);
-    const doc = await ref.get();
-    if(!doc.exists) return res.status(404).json({error:'ไม่พบใบจัดซื้อ'});
-    if(doc.data().status !== 'รออนุมัติ') return res.status(400).json({error:'ไม่สามารถอนุมัติได้'});
-    await ref.update({ status: 'อนุมัติแล้ว', approved_by: String(req.user.id), approved_at: Timestamp.now() });
-    res.json({ message:'อนุมัติใบจัดซื้อสำเร็จ' });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Receive goods from supplier (updates stock + logs transaction)
-poRouter.patch('/:id/receive', authenticate, authorize('admin','manager','technician'), async (req, res) => {
-  try {
-    const { received_items, note } = req.body;
-    const ref = db.collection('purchase_orders').doc(req.params.id);
-    const doc = await ref.get();
-    if(!doc.exists) return res.status(404).json({error:'ไม่พบใบจัดซื้อ'});
-    const po = doc.data();
-    if(po.status === 'รับของแล้ว') return res.status(400).json({error:'รับของแล้ว'});
-
-    const batch = db.batch();
-    // Update each material's stock and record expiry if provided
-    for(const ri of (received_items || po.items)) {
-      if(!ri.material_id) continue;
-      const matRef = db.collection('materials').doc(ri.material_id);
-      const matDoc = await matRef.get();
-      if(!matDoc.exists) continue;
-      const updates = { quantity: matDoc.data().quantity + Number(ri.quantity||0) };
-      if(ri.expiry_date) updates.expiry_date = Timestamp.fromDate(new Date(ri.expiry_date));
-      batch.update(matRef, updates);
-      // Log the stock transaction
-      const logRef = db.collection('stock_transactions').doc();
-      batch.set(logRef, {
-        id: logRef.id, material_id: ri.material_id, po_id: ref.id, po_code: po.code,
-        type: 'in', quantity: Number(ri.quantity||0), unit_price: ri.unit_price || 0,
-        note: note || `รับของจาก PO ${po.code}`,
-        created_by: String(req.user.id), created_at: Timestamp.now()
-      });
-    }
-    batch.update(ref, { status: 'รับของแล้ว', received_at: Timestamp.now(), received_by: String(req.user.id), receive_note: note || '' });
-    await batch.commit();
-    res.json({ message:'บันทึกการรับของสำเร็จ' });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Cancel PO
-poRouter.patch('/:id/cancel', authenticate, authorize('admin','manager'), async (req, res) => {
-  try {
-    const ref = db.collection('purchase_orders').doc(req.params.id);
-    const doc = await ref.get();
-    if(!doc.exists) return res.status(404).json({error:'ไม่พบใบจัดซื้อ'});
-    if(doc.data().status === 'รับของแล้ว') return res.status(400).json({error:'ไม่สามารถยกเลิกใบที่รับของแล้ว'});
-    await ref.update({ status: 'ยกเลิก', cancelled_by: String(req.user.id), cancelled_at: Timestamp.now() });
-    res.json({ message:'ยกเลิกใบจัดซื้อแล้ว' });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Get materials with expiry alerts
-poRouter.get('/expiry-alerts', authenticate, authorize('admin','manager','technician'), async (req, res) => {
-  try {
-    const snap = await db.collection('materials').get();
-    const now = Date.now();
-    const thirtyDays = 30 * 24 * 3600 * 1000;
-    const items = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => {
-      if(!m.expiry_date) return false;
-      const exp = m.expiry_date?.toMillis ? m.expiry_date.toMillis() : new Date(m.expiry_date).getTime();
-      return exp - now < thirtyDays; // within 30 days or already expired
-    }).map(m => {
-      const exp = m.expiry_date?.toDate ? m.expiry_date.toDate().toISOString() : m.expiry_date;
-      const expMs = m.expiry_date?.toMillis ? m.expiry_date.toMillis() : new Date(m.expiry_date).getTime();
-      return { ...m, expiry_date: exp, expired: expMs < now, days_left: Math.ceil((expMs - now) / 86400000) };
-    });
-    res.json({ items, total: items.length });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// Stock transaction history
-poRouter.get('/transactions', authenticate, authorize('admin','manager','technician'), async (req, res) => {
-  try {
-    const snap = await db.collection('stock_transactions').orderBy('created_at','desc').limit(100).get();
-    const items = snap.docs.map(d => {
-      const t = { id: d.id, ...d.data() };
-      if(t.created_at?.toDate) t.created_at = t.created_at.toDate().toISOString();
-      return t;
-    });
-    res.json({ items });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
+/* ====== PURCHASE ORDERS (REMOVED) ====== */
 
 /* ====== SCHEDULE / WORK CALENDAR (SRS 2.3.2) ====== */
 const scheduleRouter = express.Router();
@@ -748,20 +635,8 @@ notifSettingsRouter.post('/', authenticate, authorize('admin'), async (req, res)
 notifSettingsRouter.post('/test-email', authenticate, authorize('admin'), async (req, res) => {
   try {
     const cfg = await NS.getCfg();
-    const result = await NS.sendEmail(cfg, { to: req.user.email, subject:'[SDDI] ทดสอบการส่ง Email', html:`<p>ทดสอบส่งอีเมลจากระบบแจ้งซ่อม SDDI-2025 สำเร็จ ✅</p><p>เวลา: ${new Date().toLocaleString('th-TH')}</p>` });
+    const result = await NS.sendEmail(cfg, { to: req.user.email, subject:'[SDDI] ทดสอบการส่ง Email', html:`<p>ทดสอบส่งอีเมลจากระบบแจ้งซ่อม SDDI สำเร็จ ✅</p><p>เวลา: ${new Date().toLocaleString('th-TH')}</p>` });
     if(result.ok) res.json({ message:`ส่ง Email ทดสอบไปที่ ${req.user.email} สำเร็จ` });
-    else res.status(400).json({ error: result.reason });
-  } catch(e){ res.status(500).json({error:e.message}); }
-});
-
-// POST: test SMS
-notifSettingsRouter.post('/test-sms', authenticate, authorize('admin'), async (req, res) => {
-  try {
-    const { phone } = req.body;
-    if(!phone) return res.status(400).json({error:'กรุณากรอกเบอร์โทรศัพท์'});
-    const cfg = await NS.getCfg();
-    const result = await NS.sendSMS(cfg, { to: phone, body:`[SDDI] ทดสอบ SMS จากระบบแจ้งซ่อม เวลา ${new Date().toLocaleString('th-TH')}` });
-    if(result.ok) res.json({ message:'ส่ง SMS ทดสอบสำเร็จ' });
     else res.status(400).json({ error: result.reason });
   } catch(e){ res.status(500).json({error:e.message}); }
 });
@@ -800,7 +675,7 @@ const systemRouter = express.Router();
 
 systemRouter.post('/reset', authenticate, authorize('admin'), async (req, res) => {
   try {
-    const collections = ['repair_requests', 'materials', 'evaluations', 'audit_logs', 'notifications', 'leaves', 'oncall', 'purchase_orders'];
+    const collections = ['repair_requests', 'materials', 'evaluations', 'audit_logs', 'notifications', 'leaves', 'oncall'];
     
     // Batch delete (caution: Firestore limits batch size to 500)
     for (const coll of collections) {
@@ -831,6 +706,5 @@ module.exports = {
   notifSettingsRouter,
   auditLogRouter,
   systemRouter,
-  reportRouter,
-  poRouter
+  reportRouter
 };

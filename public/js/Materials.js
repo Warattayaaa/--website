@@ -14,7 +14,7 @@ async function pageMaterials(){
     const tb = items.reduce((sum,m)=>sum+(m.quantity||0),0);
     const low = items.filter(m=>(m.quantity||0)<=(m.reorder_point||5));
 
-    c.innerHTML=`
+ c.innerHTML=`
     <div class="flex jb ic mb2">
       <div class="g2" style="width:100%;max-width:400px">
         <div class="scard c-blue"><div class="scard-row"><div class="scard-ico">📦</div></div><div class="scard-val">${tb}</div><div class="scard-lbl">ชิ้นในคลัง</div></div>
@@ -27,7 +27,7 @@ async function pageMaterials(){
         <input class="fc" id="f-mat" placeholder="ค้นหาชื่อวัสดุ..." style="max-width:300px" oninput="filtMat(this.value)">
       </div>
       <div class="tw"><table>
-        <thead><tr><th>ชื่อวัสดุ/อุปกรณ์</th><th>รหัส</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>หน่วย</th>${canEdit?'<th>จัดการ</th>':''}</tr></thead>
+        <thead><tr><th>ชื่อวัสดุ/อุปกรณ์</th><th>รหัส</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>หน่วย</th><th>ราคา/หน่วย</th>${canEdit?'<th>จัดการ</th>':''}</tr></thead>
         <tbody id="mat-tb">
         ${items.length?items.map(m=>{
           const isL=(m.quantity||0)<=(m.reorder_point||5);
@@ -37,13 +37,27 @@ async function pageMaterials(){
             <td>${m.category||'-'}</td>
             <td><span class="badge ${isL?'b-red':'b-green'}">${m.quantity||0}</span></td>
             <td>${m.unit||'ชิ้น'}</td>
-            ${canEdit?`<td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="openStockModal('${m.id}','${m.name}',${m.quantity||0})">+/- สต็อก</button><button class="btn btn-ghost btn-sm" onclick='openMatModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>✎ แก้ไข</button></td>`:''}
+            <td class="mono">฿${(m.unit_price||0).toLocaleString()}</td>
+            ${canEdit?`<td style="white-space:nowrap">
+              <button class="btn btn-ghost btn-sm" onclick="openStockModal('${m.id}','${m.name}',${m.quantity||0})">+/- สต็อก</button>
+              <button class="btn btn-ghost btn-sm" onclick='openMatModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>✎ แก้ไข</button>
+              <button class="btn btn-ghost btn-sm text-red" onclick="deleteMat('${m.id}','${m.name}')">🗑️ ลบ</button>
+            </td>`:''}
           </tr>`;
-        }).join(''):`<tr><td colspan="${canEdit?6:5}">${emptyState('📦','ไม่มีวัสดุในคลัง')}</td></tr>`}
+        }).join(''):`<tr><td colspan="${canEdit?7:6}">${emptyState('📦','ไม่มีวัสดุในคลัง')}</td></tr>`}
         </tbody>
       </table></div>
     </div>`;
   } catch(e) { c.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`; }
+}
+
+async function deleteMat(id, name){
+  if(!confirm(`⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบวัสดุ "${name}"? \nการลบนี้จะไม่สามารถย้อนกลับได้`)) return;
+  try {
+    const res = await apiFetch(`/materials/${id}`, { method:'DELETE' });
+    toast(res.message);
+    pageMaterials();
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 function filtMat(v){
@@ -59,9 +73,10 @@ function openMatModal(m=null){
       <div class="fg"><label class="fl">ชื่อวัสดุ <span class="req">*</span></label><input class="fc" id="m-nm" value="${m?m.name:''}"></div>
       <div class="fg"><label class="fl">รหัส (SKU)</label><input class="fc" id="m-cd" value="${m?m.code||'':''}"></div>
     </div>
-    <div class="frow">
+    <div class="frow3">
       <div class="fg"><label class="fl">หมวดหมู่</label><select class="fc" id="m-cat"><option value="">-- เลือก --</option>${['ไฟฟ้า','ประปา','ฮาร์ดแวร์','อิเล็กทรอนิกส์','ทั่วไป'].map(c=>`<option${m&&m.category===c?' selected':''}>${c}</option>`).join('')}</select></div>
       <div class="fg"><label class="fl">หน่วยเรียก</label><input class="fc" id="m-un" value="${m?m.unit||'ชิ้น':'ชิ้น'}"></div>
+      <div class="fg"><label class="fl">ราคา/หน่วย <span class="req">*</span></label><input class="fc" id="m-pr" type="number" value="${m?m.unit_price||0:0}" min="0" step="0.01"></div>
     </div>
     <div class="frow" ${m?'style="display:none"':''}>
       <div class="fg"><label class="fl">จำนวนตั้งต้น <span class="req">*</span></label><input class="fc" id="m-st" type="number" value="${m?m.quantity:0}" min="0"></div>
@@ -76,9 +91,11 @@ async function saveMat(id){
   const code=document.getElementById('m-cd').value.trim();
   const cat=document.getElementById('m-cat').value;
   const un=document.getElementById('m-un').value.trim();
+  const price=parseFloat(document.getElementById('m-pr').value)||0;
   if(!name){toast('กรุณากรอกชื่อวัสดุ','warn');return;}
+  if(isNaN(price)||price<0){toast('ราคาต้องเป็นตัวเลขที่มากกว่าหรือเท่ากับ 0','warn');return;}
   
-  const payload = { name, code, category: cat, unit: un };
+  const payload = { name, code, category: cat, unit: un, unit_price: price };
   if(!id) {
     payload.quantity = parseInt(document.getElementById('m-st').value)||0;
     payload.reorder_point = parseInt(document.getElementById('m-min').value)||5;

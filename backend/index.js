@@ -3,8 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
+app.use(helmet()); // Basic security headers
 
 // ── CORS: whitelist production + local dev ──────────────────────────────────
 const allowedOrigins = [
@@ -91,7 +93,6 @@ app.use('/api/evaluations', otherRoutes.evalRouter);
 app.use('/api/dashboard', otherRoutes.dashRouter);
 app.use('/api/notifications', otherRoutes.notifRouter);
 app.use('/api/reports', otherRoutes.reportRouter);
-app.use('/api/purchase-orders', otherRoutes.poRouter);
 app.use('/api/schedule', otherRoutes.scheduleRouter);
 app.use('/api/notification-settings', otherRoutes.notifSettingsRouter);
 app.use('/api/audit-logs', otherRoutes.auditLogRouter);

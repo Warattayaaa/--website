@@ -44,17 +44,9 @@ function switchAuthTab(t){
 function renderLogin(){
   document.getElementById('auth-area').innerHTML=`
     <div id="auth-alert"></div>
-    <div class="fg"><label class="fl">อีเมล</label><input class="fc" id="l-email" type="email" value="admin@school.ac.th"></div>
-    <div class="fg"><label class="fl">รหัสผ่าน</label><input class="fc" id="l-pass" type="password" value="admin1234" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <button class="btn btn-primary btn-block btn-lg" style="margin-top:.5rem" onclick="doLogin()">🔑 เข้าสู่ระบบ</button>
-    <div class="demo-panel">
-      <div class="demo-title">บัญชีทดสอบ — คลิกเพื่อเลือก</div>
-      ${[['admin@school.ac.th','admin1234','🛡️ Admin'],['supachok@school.ac.th','manager1234','📋 Manager'],['wasurat@school.ac.th','tech1234','🔧 ช่างซ่อม'],['warataya@school.ac.th','user1234','👤 ผู้ใช้']].map(([e,p,l])=>`
-        <div class="demo-row">
-          <span class="demo-label">${l}</span>
-          <button class="demo-btn" onclick="document.getElementById('l-email').value='${e}';document.getElementById('l-pass').value='${p}'">ใช้งาน</button>
-        </div>`).join('')}
-    </div>`;
+    <div class="fg"><label class="fl">อีเมล</label><input class="fc" id="l-email" type="email" placeholder="example@school.ac.th"></div>
+    <div class="fg"><label class="fl">รหัสผ่าน</label><input class="fc" id="l-pass" type="password" placeholder="รหัสผ่านของคุณ" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn btn-primary btn-block btn-lg" style="margin-top:.5rem" onclick="doLogin()">🔑 เข้าสู่ระบบ</button>`;
 }
 
 function renderRegister(){

@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const { run } = require('../db/database');
 const JWT_SECRET = process.env.JWT_SECRET || 'maint_sys_secret_2568';
 
 function authenticate(req, res, next) {
@@ -21,20 +20,4 @@ function authorize(...roles) {
   };
 }
 
-function auditLog(action, table, targetId, detail) {
-  return (req, res, next) => {
-    const orig = res.json.bind(res);
-    res.json = (body) => {
-      if (res.statusCode < 400) {
-        try {
-          run('INSERT INTO audit_logs (user_id,action,target_table,target_id,detail,ip_address) VALUES (?,?,?,?,?,?)',
-            [req.user?.id || null, action, table, targetId || body?.id || null, detail, req.ip]);
-        } catch {}
-      }
-      return orig(body);
-    };
-    next();
-  };
-}
-
-module.exports = { authenticate, authorize, auditLog, JWT_SECRET };
+module.exports = { authenticate, authorize, JWT_SECRET };

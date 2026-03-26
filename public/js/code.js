@@ -146,7 +146,6 @@ async function buildShell(role){
     {sec:'การจัดการ',r:['technician','manager','admin']},
     {p:'materials',i:'📦',l:'คลังวัสดุ',r:['technician','manager','admin']},
     {p:'schedule',i:'📅',l:'ตารางงาน/เวร',r:['technician','manager','admin']},
-    {p:'purchase-orders',i:'📋',l:'ใบจัดซื้อ (PO)',r:['manager','admin']},
     {p:'reports',i:'📊',l:'รายงาน & Export',r:['manager','admin']},
     {sec:'ทั่วไป',r:['user','technician','manager','admin']},
     {p:'track',i:'🔍',l:'ติดตามงาน',r:['user','technician','manager','admin']},
@@ -238,7 +237,7 @@ function renderCurrentPage() {
   if(l)l.classList.add('on');
   if(window.innerWidth<=900)document.getElementById('sidebar')?.classList.remove('open');
 
-  const titles={dashboard:'📊 ภาพรวมระบบ','requests-list':'🔧 รายการแจ้งซ่อม','request-new':'➕ แจ้งซ่อมใหม่','request-detail':'📋 รายละเอียดงานซ่อม',materials:'📦 คลังวัสดุ',schedule:'📅 ตารางงาน & เวรฉุกเฉิน','purchase-orders':'📋 ใบจัดซื้อ (PO)',reports:'📊 รายงาน & Export',users:'👥 จัดการผู้ใช้','system-log':'📋 บันทึกกิจกรรมระบบ','notif-settings':'🔔 ตั้งค่าแจ้งเตือน',settings:'⚙️ ตั้งค่าระบบ',track:'🔍 ติดตามงาน',profile:'👤 โปรไฟล์'};
+  const titles={dashboard:'📊 ภาพรวมระบบ','requests-list':'🔧 รายการแจ้งซ่อม','request-new':'➕ แจ้งซ่อมใหม่','request-detail':'📋 รายละเอียดงานซ่อม',materials:'📦 คลังวัสดุ',schedule:'📅 ตารางงาน & เวรฉุกเฉิน',reports:'📊 รายงาน & Export',users:'👥 จัดการผู้ใช้','system-log':'📋 บันทึกกิจกรรมระบบ','notif-settings':'🔔 ตั้งค่าแจ้งเตือน',settings:'⚙️ ตั้งค่าระบบ',track:'🔍 ติดตามงาน',profile:'👤 โปรไฟล์'};
   const tEl=document.getElementById('page-title');
   if(tEl) tEl.textContent=titles[vp]||'ระบบแจ้งซ่อม';
 
@@ -252,7 +251,6 @@ function renderCurrentPage() {
   }
   else if(vp==='materials' && typeof pageMaterials==='function') pageMaterials();
   else if(vp==='schedule' && typeof pageSchedule==='function') pageSchedule();
-  else if(vp==='purchase-orders' && typeof pagePurchaseOrders==='function') pagePurchaseOrders();
   else if(vp==='reports' && typeof pageReports==='function') pageReports();
   else if(vp==='users' && typeof pageUsers==='function') pageUsers();
   else if(vp==='system-log' && typeof pageSystemLog==='function') pageSystemLog();

@@ -1,198 +1,133 @@
-# 🔧 ระบบแจ้งซ่อมในสถานศึกษา (Maintenance Management System)
-## SDDI Project - Version 2025
+# 🔧 คู่มือระบบแจ้งซ่อมบำรุงในสถานศึกษา (Maintenance Management System)
+## โครงการ SDDI - Version 2025 (Master Edition)
 
-ระบบบริหารจัดการงานซ่อมบำรุงสำหรับสถานศึกษาแบบครบวงจร ครอบคลุมตั้งแต่การแจ้งซ่อม, การติดตามสถานะ, การจัดการวัสดุอุปกรณ์, ไปจนถึงการออกรายงานสถิติ เพื่อประสิทธิภาพสูงสุดในการดูแลรักษาสิ่งอำนวยความสะดวก
+ระบบบริหารจัดการงานซ่อมบำรุงสำหรับสถานศึกษาที่ออกแบบมาเป็น **Serverless Multi-Role SPA** ที่มีความทันสมัย กระชับ และมีประสิทธิภาพสูงสุด เน้นการใช้งานที่ง่าย (Simple) และภาระการบำรุงรักษาต่ำ (Low Maintenance) 
 
 ---
 
-## 1. ข้อมูลทางด้านเทคนิค (Technical Overview)
+## 📂 1. โครงสร้างโครงการ (Project Structure)
 
-### 1.1 System Architecture 🏗️
-ระบบถูกพัฒนาด้วยสถาปัตยกรรม **Serverless** บน Google Cloud Platform (Firebase) เพื่อความรวดเร็วในการขยายตัวและความปลอดภัยสูง
+โครงการนี้ใช้สถาปัตยกรรม **Monorepo-style** แบ่งส่วนการทำงานออกจากกันอย่างชัดเจน:
+
+- **`/public`**: ส่วนหน้าบ้าน (Frontend) ทั้งหมด
+    - `admin.html`, `manager.html`, `technician.html`, `user.html`: หน้า GUI แยกตามบทบาท
+    - `index.html`: หน้าล็อกอินหลักและจุดเริ่มต้นของระบบ
+    - `style.css`: ไฟล์สไตล์กลาง (Glassmorphism & Neon Design)
+    - **`/js`**: ไฟล์ตรรกะเบื้องหลัง (Business Logic)
+        - `code.js`: **Core Engine** (จัดการ Navigation, Auth Refresh, UI Helpers)
+        - `auth.js`: ระบบยืนยันตัวตนและการเข้าถึง
+        - `Requests.js`, `Materials.js`, `Users.js`: ฟังก์ชันจัดการโมดูลต่าง ๆ
+        - `Settings.js`: ระบบรวมการจัดการ SMTP, บันทึก Log และสิทธิ์ในหน้าเดียว
+- **`/backend`**: ส่วนหลังบ้าน (Node.js API)
+    - `index.js`: จุดเชื่อมต่อหลัก (Express + Firebase Functions)
+    - **`/routes`**: การกำหนดเส้นทาง API แยกตามบริการ (RESTful Endpoints)
+    - **`/services`**: บริการเสริมอิสระ เช่น `NotificationService` (SMTP Email)
+    - **`/db`**: การตั้งค่าและการ Seed ข้อมูลเบื้องต้นลง Firestore
+- **`/firestore.rules`**: กฎความปลอดภัยสำหรับการเข้าถึงฐานข้อมูลในระดับโปรดักชัน
+
+---
+
+## 🏗️ 2. สถาปัตยกรรมระบบ (System Architecture)
+
+### 2.1 ภาพรวมการทำงาน (System Overview)
+ระบบทำงานในรูปแบบ **Cloud-First** โดย Frontend สื่อสารกับ Backend ผ่าน **REST API** และใช้ JWT (JSON Web Token) ในการยืนยันตัวตน
 
 ```mermaid
 graph TD
-    Client[Browser / Mobile Web] -- HTTPS/REST --> API[Firebase Cloud Functions / Express]
-    API -- Auth --> Auth[JWT / bcrypt]
-    API -- Read/Write --> Firestore[(Google Cloud Firestore)]
-    API -- Upload --> Storage[Firebase Storage]
-    API -- Email --> Resend[Resend API]
-    API -- SMS --> Twilio[Twilio SMS]
-    Hosting[Firebase Hosting] -- Serves --> Client
-```
-
-### 1.2 Use Case Diagram 👤
-ระบบรองรับ 4 บทบาทหลักที่มีสิทธิ์การใช้งานแตกต่างกัน
-
-```mermaid
-useCaseDiagram
-    actor "User" as U
-    actor "Technician" as T
-    actor "Manager" as M
-    actor "Admin" as A
-
-    package "ระบบแจ้งซ่อม" {
-        usecase "แจ้งซ่อมใหม่ (Submit Request)" as UC1
-        usecase "ติดตามสถานะ (Track Status)" as UC2
-        usecase "ประเมินความพึงพอใจ (Evaluate)" as UC3
-        usecase "อัปเดตงานซ่อม (Fix & Update)" as UC4
-        usecase "เบิกวัสดุอุปกรณ์ (Withdraw Materials)" as UC5
-        usecase "มอบหมายงาน (Assign Task)" as UC6
-        usecase "จัดการใบจัดซื้อ (PO Management)" as UC7
-        usecase "ดูรายงานสรุป (Dashboard & Reports)" as UC8
-        usecase "จัดการผู้ใช้และสิทธิ์ (User Mgmt)" as UC9
-    }
-
-    U --> UC1
-    U --> UC2
-    U --> UC3
+    User((👩‍💻 ผู้ใช้/ช่าง/แอดมิน)) -- Access --> Web[SPA Frontend]
+    Web -- HTTPS/JWT --> API[Express.js on Cloud Functions]
+    API -- Admin SDK --> DB[(Google Firestore)]
+    API -- Admin SDK --> Storage[Firebase Storage]
+    API -- SMTP --> Mail[Mail Server / SMTP]
     
-    T --> UC4
-    T --> UC5
-    T --> UC2
-    
-    M --> UC6
-    M --> UC7
-    M --> UC8
-    
-    A --> UC9
-    A --> UC8
-    A --> UC6
+    subgraph "ความปลอดภัย (Security)"
+        Auth[JWT Authentication]
+        Rate[Rate Limiting]
+        Rules[Firestore Rules: Deny All]
+        Helm[Helmet Security Headers]
+    end
 ```
 
-### 1.3 Activity Diagram (Repair Workflow) ⚙️
-กระบวนการทำงานตั้งแต่เริ่มจนจบงานซ่อม
+### 2.2 วงจรชีวิตของใบแจ้งซ่อม (Repair Request Lifecycle)
+ทุกใบแจ้งซ่อมจะมี Tracking ID หกหลัก (เช่น `REQ782`) และมีสถานะดังนี้:
 
-```mermaid
-activityDiagram
-    start
-    :User: แจ้งซ่อมผ่านระบบ;
-    :System: ส่ง Notification หา Manager;
-    if (เปิด Auto-Assign?) then (ใช่)
-        :System: มอบหมายช่างที่มีงานน้อยที่สุดอัตโนมัติ;
-    else (ไม่)
-        :Manager: มอบหมายงานให้ช่างด้วยตนเอง;
-    endif
-    :Technician: รับงานและเริ่มดำเนินการ;
-    :Technician: เบิกวัสดุจากคลัง (ถ้ามี);
-    :Technician: อัปเดตรูปถ่าย (ก่อน/หลัง) และสถานะ;
-    :System: แจ้งเตือน User เมื่อเสร็จสิ้น;
-    :User: ประเมินความพึงพอใจ;
-    stop
-```
-
-### 1.4 ER Diagram (Database Schema) 📊
-โครงสร้างข้อมูลบน **NoSQL Firestore**
-
-```mermaid
-erDiagram
-    USERS {
-        string id PK
-        string email
-        string password
-        string role
-        string department
-    }
-    REPAIR_REQUESTS {
-        string id PK
-        string tracking_id
-        string status
-        string category
-        string urgency
-        timestamp created_at
-    }
-    MATERIALS {
-        string id PK
-        string name
-        int quantity
-        float unit_price
-        date expiry_date
-    }
-    PURCHASE_ORDERS {
-        string id PK
-        string code
-        string status
-        float total_amount
-    }
-    EVALUATIONS {
-        string id PK
-        string request_id FK
-        int score
-        string comment
-    }
-
-    USERS ||--o{ REPAIR_REQUESTS : "notifies"
-    REPAIR_REQUESTS ||--o{ MATERIALS : "uses"
-    REPAIR_REQUESTS ||--o| EVALUATIONS : "has"
-    USERS ||--o{ PURCHASE_ORDERS : "manages"
-```
+1.  **รอดำเนินการ (Pending):** เมื่อผู้ใช้ (User) ส่งใบแจ้งซ่อมใหม่ (ระบบส่งเมลหา Manager)
+2.  **กำลังดำเนินการ (Ongoing):** เมื่อมีการมอบหมายช่าง หรือช่างกดรับงาน (ช่างอัปเดตรูป "ก่อนทำ")
+3.  **รอตรวจสอบ (Review):** เมื่อช่างซ่อมเสร็จและเบิกวัสดุเรียบร้อย (ช่างอัปเดตรูป "หลังทำ")
+4.  **เสร็จสมบูรณ์ (Completed):** เมื่อหัวหน้าหรือผู้ใช้ยืนยันการรับงาน (ระบบส่งเมลหา User ให้ประเมิน)
 
 ---
 
-## 2. ประสบการณ์ผู้ใช้ (UX/UI) & การออกแบบ
+## 📊 3. ฐานข้อมูลและสิทธิ์ (Database & RBAC)
 
-### 2.1 User Flow
-1. **Login:** เลือก Dashboard ตามบทบาท
-2. **Action:** แจ้งซ่อม (User) / ทำงาน (Tech) / อนุมัติ (Manager)
-3. **Finish:** ปิดงานพร้อมหลักฐานรูปภาพและตัดสต็อกวัสดุอัตโนมัติ
+### 3.1 โครงสร้างฐานข้อมูล (Firestore Collections)
+| Collection | รายละเอียด | ฟิลด์ข้อมูลสำคัญ |
+|---|---|---|
+| `users` | บัญชีผู้ใช้งาน | `id, name, email, role, department, password (hashed)` |
+| `repair_requests` | รายการซ่อม | `tracking_id, title, status, location, urgency, media_paths` |
+| `materials` | คลังวัสดุ | `name, quantity, unit, unit_price, reorder_point` |
+| `audit_logs` | ประวัติกิจกรรม | `user_id, action, target_id, detail, created_at` |
+| `notifications` | การแจ้งเตือนในแอป | `user_id, title, message, is_read` |
+| `settings` | การตั้งค่าระบบ | `smtp_host, smtp_port, auto_assign_enabled` |
 
-### 2.2 UX/UI Principles
-- **Dark Mode Aesthetic:** ใช้โทนสีมืด (Deep Blue & Graphite) เพื่อลดความเมื่อยล้าทางสายตาและดูพรีเมียม
-- **Glassmorphism:** ใช้เอฟเฟกต์ความโปร่งใสและ Blur ใน Cards และ Modals
-- **Micro-Animations:** มี Feedback เมื่อกดปุ่มหรือเปลี่ยนสถานะ
-- **Responsive Web Design:** รองรับ Mobile Web สำหรับช่างที่ต้องทำงานหน้างาน
-
-### 2.3 API Endpoints (Core)
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| POST | `/api/auth/login` | เข้าสู่ระบบ | No |
-| POST | `/api/requests` | แจ้งซ่อมใหม่ | User |
-| PATCH | `/api/requests/:id/assign` | มอบหมายช่าง | Manager |
-| PATCH | `/api/requests/:id/status` | อัปเดตสถานะงาน | Tech |
-| GET | `/api/reports/summary` | สรุปข้อมูลสถิติ | Manager |
-
----
-
-## 3. Stack & Tools ✨
-
-- **Frontend:** HTML5, CSS3 (Vanilla), JavaScript ES6+
-- **Backend:** Node.js, Express.js
-- **Compute:** Firebase Cloud Functions (v2)
-- **Database:** Google Firestore (Serverless NoSQL)
-- **Files:** Firebase Storage (Media Evidence)
-- **Communication:** Resend (Email), Twilio (SMS Notification)
-- **Security:** bcrypt (Password Hashing), JWT (Stateless Auth)
-- **Testing:** Newman (Postman CLI), manual test cases
+### 3.2 ตารางสิทธิ์เข้าถึง (RBAC Matrix)
+| ฟังก์ชัน | User | Tech | Manager | Admin |
+|---|:---:|:---:|:---:|:---:|
+| แจ้งซ่อมใหม่ (New Request) | ✅ | – | ✅ | ✅ |
+| ติดตามสถานะ (Track Status) | ✅ | ✅ | ✅ | ✅ |
+| รับงาน/ซ่อมงาน (Work) | – | ✅ | – | – |
+| บริหารจัดการคลัง (Inventory) | – | ✅* | ✅ | ✅ |
+| มอบหมายงาน (Assign) | – | – | ✅ | ✅ |
+| จัดการผู้ใช้ & ระบบ (Settings) | – | – | ✅ | ✅ |
+| ล้างข้อมูลระบบ (Factory Reset) | – | – | – | ✅ |
+*\*ช่างทำได้เฉพาะเบิกวัสดุ ไม่สามารถแก้ราคาหรือลบรายการได้*
 
 ---
 
-## 4. การทดสอบและรายงาน (Testing) 🧪
+## 🔗 4. เส้นทาง API (API Endpoints Overview)
 
-### 4.1 Test Cases (Sample)
-| ID | Title | Expected Result | Status |
-|---|---|---|---|
-| TC-01 | สร้างใบแจ้งซ่อม | ระบบต้องออก Tracking ID และส่งเมล์หาผู้แจ้ง | ✅ Pass |
-| TC-02 | เบิกวัสดุเกินสต็อก | ระบบต้องแจ้งเตือนและไม่อนุญาตให้เบิก | ✅ Pass |
-| TC-03 | มอบหมายงานอัตโนมัติ | ระบบต้องเลือกช่างที่งานน้อยที่สุดในตอนนั้น | ✅ Pass |
-| TC-04 | แจ้งเตือนฉุกเฉิน | ระบบต้องส่ง SMS หา Manager ทันที | ✅ Pass |
+| Method | Endpoint | รายละเอียด |
+|---|---|---|
+| POST | `/api/auth/login` | เข้าสู่ระบบ และรับ JWT Token |
+| GET | `/api/requests` | ดึงรายการแจ้งซ่อม (กรองตามบทบาทอัตโนมัติ) |
+| POST | `/api/requests` | สร้างใบแจ้งซ่อมใหม่ |
+| PATCH | `/api/requests/:id` | อัปเดตสถานะ/มอบหมายช่าง/ปิดงาน |
+| GET | `/api/materials` | ตรวจสอบรายการวัสดุและสต็อก |
+| DELETE| `/api/materials/:id` | ลบวัสดุออกจากคลัง (Admin/Manager) |
+| GET | `/api/dashboard/stats` | สรุปข้อมูลเชิงสถิติสำหรับหน้า Dashboard |
 
-### 4.2 API Testing
-เราใช้ **Postman** ในการรัน Integration Test สำหรับ API ทั้งหมด 25+ Endpoints เพื่อให้มั่นใจว่าระบบทำงานประสานกันได้ไร้รอยต่อ
+---
+
+## 🛡️ 5. ความปลอดภัยและการดูแลรักษา (Security & Maintenance)
+
+### 5.1 ระบบความปลอดภัย
+1.  **JWT Authentication:** ข้อมูลผู้ใช้ถูกเข้ารหัสใน Token อายุ 7 วัน
+2.  **Rate Limiting:** จำกัดการ Login ผิดเกิน 10 ครั้งใน 15 นาที เพื่อป้องกัน Brute-force
+3.  **NoSQL Security:** `firestore.rules` ถูกตั้งค่าเป็น `Deny All` เพื่อบังคับให้เข้าข้อมูลผ่าน API ที่มีการตรวจสอบสิทธิ์เท่านั้น
+4.  **HTTPS / Helmet:** ระบบบังคับใช้ HTTPS และมี Security Headers ป้องกันการโจมตีเว็บพื้นฐาน
+
+### 5.2 คู่มือการตั้งค่า SMTP (Email)
+เพื่อให้การแจ้งเตือนทำงานได้จริง กรุณาไปที่หน้า **"ตั้งค่าระบบ"** และกรอกข้อมูลดังนี้:
+- **Host:** เช่น `smtp.gmail.com`
+- **Port:** `465` (SSL) หรือ `587` (TLS)
+- **User/Pass:** อีเมลและรหัสผ่านของผู้ส่ง (Gmail ต้องใช้ App Password)
 
 ---
 
-## 5. การติดตั้งและ Deploy (Deployment) 🚀
+## 🚀 6. ขั้นตอนการติดตั้ง (Deployment)
 
-1. **Prerequisites:** `npm install -g firebase-tools`
-2. **Environment:** สร้างไฟล์ `.env` ในโฟลเดอร์ `backend` พร้อม API Keys
-3. **Local Dev:**
-   - Frontend: `npx live-server public`
-   - Backend: `firebase emulators:start`
-4. **Production Deploy:**
-   ```bash
-   firebase deploy --only hosting,functions
-   ```
+1.  **Firebase Setup:** สร้าง Project ใน Firebase Console และจด Project ID
+2.  **Environment:** ในโฟลเดอร์ `backend` ให้ตั้งค่าค่าคงที่ผ่าน Cloud Console เช่น `JWT_SECRET`
+3.  **Command:**
+    ```bash
+    npm install -g firebase-tools
+    firebase login
+    firebase use --add YOUR_PROJECT_ID
+    firebase deploy
+    ```
 
 ---
-> [!NOTE]
-> ระบบนี้ถูกออกแบบมาเพื่อรองรับผู้ใช้พร้อมกันสูงสุด 200 คน (Concurrent) โดยมีการทำ Rate Limiting เพื่อป้องกันการยิง API เกินความจำเป็น
+> **Master Edition Note:** ระบบนี้ได้รับการปรับปรุงโดยการตัดส่วน PO และ SMS (Twilio/Resend) ออก เพื่อเน้นความเบาและเสถียรที่สุดในการใช้งานในสภาพแวดล้อมจริง
+
+## 👨‍💻 ผู้พัฒนา
+- ทีมงาน SDDI - Maintenance Management System 2025
