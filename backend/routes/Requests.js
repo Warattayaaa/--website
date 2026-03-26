@@ -39,6 +39,21 @@ function slaDeadline(urgency) {
   return Timestamp.fromDate(d);
 }
 
+// 📦 Recursive utility to convert all Timestamps to ISO Strings
+function serializeTimestamps(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (data instanceof Timestamp) return data.toDate().toISOString();
+  if (Array.isArray(data)) return data.map(serializeTimestamps);
+  
+  const result = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      result[key] = serializeTimestamps(data[key]);
+    }
+  }
+  return result;
+}
+
 // Helper to populate relations manually
 async function populateRequest(reqData) {
   let requester_name = null, tech_name = null, building_name = null, floor = null, room = null;
@@ -94,12 +109,10 @@ router.get('/', authenticate, async (req, res) => {
     const offset = (parseInt(page)-1) * parseInt(limit);
     const paginated = populated.slice(offset, offset+parseInt(limit));
 
-    // Convert timestamps to ISO strings
-    paginated.forEach(p => {
-      Object.keys(p).forEach(k => { if (p[k] instanceof Timestamp) p[k] = p[k].toDate().toISOString(); });
-    });
+    // Convert timestamps to ISO strings recursively
+    const serialized = paginated.map(serializeTimestamps);
 
-    res.json({ total: items.length, page:parseInt(page), limit:parseInt(limit), items: paginated });
+    res.json({ total: items.length, page:parseInt(page), limit:parseInt(limit), items: serialized });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -136,8 +149,7 @@ router.get('/track/:tid', async (req, res) => {
     if (snap.empty) return res.status(404).json({ error: 'ไม่พบหมายเลขติดตามนี้' });
     const data = snap.docs[0].data();
     const populated = await populateRequest(data);
-    Object.keys(populated).forEach(k => { if (populated[k] instanceof Timestamp) populated[k] = populated[k].toDate().toISOString(); });
-    res.json(populated);
+    res.json(serializeTimestamps(populated));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -164,8 +176,7 @@ router.get('/:id', authenticate, async (req, res) => {
     const evSnap = await db.collection('evaluations').where('request_id', '==', req.params.id).limit(1).get();
     r.evaluation = evSnap.empty ? null : evSnap.docs[0].data();
     
-    Object.keys(r).forEach(k => { if (r[k] instanceof Timestamp) r[k] = r[k].toDate().toISOString(); });
-    res.json(r);
+    res.json(serializeTimestamps(r));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -379,37 +390,48 @@ router.post('/:id/materials', authenticate, authorize('technician','manager','ad
     const qty = parseFloat(quantity_used);
     if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'จำนวนต้องมากกว่า 0' });
 
-    // Check request exists
-    const reqDoc = await db.collection('repair_requests').doc(req.params.id).get();
-    if (!reqDoc.exists) return res.status(404).json({ error: 'ไม่พบงานซ่อม' });
+    const result = await db.runTransaction(async (transaction) => {
+      // 1. READS (Must be first)
+      const reqRef = db.collection('repair_requests').doc(req.params.id);
+      const matRef = db.collection('materials').doc(material_id);
+      
+      const [reqDoc, matDoc] = await Promise.all([
+        transaction.get(reqRef),
+        transaction.get(matRef)
+      ]);
 
-    // Check & deduct material stock
-    const matRef = db.collection('materials').doc(material_id);
-    const matDoc = await matRef.get();
-    if (!matDoc.exists) return res.status(404).json({ error: 'ไม่พบวัสดุ' });
-    const mat = matDoc.data();
-    if ((mat.quantity || 0) < qty) return res.status(400).json({ error: `สต็อกไม่พอ (เหลือ ${mat.quantity} ${mat.unit})` });
+      if (!reqDoc.exists) throw new Error('ไม่พบงานซ่อม');
+      if (!matDoc.exists) throw new Error('ไม่พบวัสดุ');
 
-    await matRef.update({ quantity: (mat.quantity || 0) - qty });
+      const mat = matDoc.data();
+      const currentQty = mat.quantity || 0;
+      if (currentQty < qty) throw new Error(`สต็อกไม่พอ (เหลือ ${currentQty} ${mat.unit})`);
 
-    const ref = db.collection('material_usage').doc();
-    const record = {
-      id: ref.id, request_id: req.params.id,
-      material_id, material_name: mat.name, unit: mat.unit || '',
-      quantity_used: qty,
-      withdrawn_by: String(req.user.id), withdrawn_by_name: req.user.name || req.user.email,
-      withdrawn_at: Timestamp.now()
-    };
-    await ref.set(record);
+      // 2. WRITES
+      const newUsageRef = db.collection('material_usage').doc();
+      const newLogRef = db.collection('audit_logs').doc();
 
-    await db.collection('audit_logs').add({
-      user_id: String(req.user.id), action: 'WITHDRAW_MATERIAL',
-      target_table: 'material_usage', target_id: ref.id,
-      detail: `เบิก ${mat.name} x${qty} สำหรับงาน ${reqDoc.data().tracking_id}`,
-      created_at: Timestamp.now()
+      transaction.update(matRef, { quantity: currentQty - qty });
+      
+      transaction.set(newUsageRef, {
+        id: newUsageRef.id, request_id: req.params.id,
+        material_id, material_name: mat.name, unit: mat.unit || '',
+        quantity_used: qty,
+        withdrawn_by: String(req.user.id), withdrawn_by_name: req.user.name || req.user.email,
+        withdrawn_at: Timestamp.now()
+      });
+
+      transaction.set(newLogRef, {
+        user_id: String(req.user.id), action: 'WITHDRAW_MATERIAL',
+        target_table: 'material_usage', target_id: newUsageRef.id,
+        detail: `เบิก ${mat.name} x${qty} สำหรับงาน ${reqDoc.data().tracking_id}`,
+        created_at: Timestamp.now()
+      });
+
+      return { id: newUsageRef.id, material_name: mat.name };
     });
 
-    res.status(201).json({ message: `เบิก ${mat.name} x${qty} สำเร็จ`, id: ref.id });
+    res.status(201).json({ message: `เบิก ${result.material_name} x${qty} สำเร็จ`, id: result.id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

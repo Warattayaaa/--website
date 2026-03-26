@@ -1,15 +1,14 @@
 /* ═══════════════════════════════════════
    PAGE: USERS & PROFILE
 ═══════════════════════════════════════ */
-async function pageUsers(){
-  const c=document.getElementById('page-content');
-  c.innerHTML = loadingState();
+async function pageUsers(navId){
+  setLoading('users', navId);
   try {
     const users = await apiFetch('/users');
     let st={admin:0,manager:0,technician:0,user:0};
     users.forEach(u=>st[u.role]=(st[u.role]||0)+1);
 
-    c.innerHTML=`
+    renderContent(`
     <div class="stats-grid mb2">
       ${Object.entries(st).map(([r,v])=>`
       <div class="scard"><div class="scard-lbl" style="margin-bottom:.5rem">${roleBadge(r)}</div><div class="scard-val">${v}</div></div>
@@ -42,8 +41,8 @@ async function pageUsers(){
           </tr>`).join('')}
         </tbody>
       </table></div>
-    </div>`;
-  } catch(e) { c.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`; }
+    </div>`, 'users', navId);
+  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'users', navId); }
 }
 
 async function deleteUser(id, name) {
@@ -86,27 +85,3 @@ async function doChangeRole(){
   } catch(e) { toast(e.message, 'err'); }
 }
 
-function pageProfile(){
-  const c=document.getElementById('page-content');
-  const u=APP.user;
-  
-  c.innerHTML=`
-  <div style="max-width:600px;margin:0 auto">
-    <div class="card mb">
-      <div class="card-b" style="text-align:center;padding:3rem 1rem">
-        <div style="width:80px;height:80px;background:linear-gradient(135deg,var(--spark2),var(--violet));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;margin:0 auto 1rem;box-shadow:0 10px 20px rgba(0,0,0,0.3)">${u.name[0]}</div>
-        <h2 style="margin-bottom:.5rem">${u.name}</h2>
-        <div style="margin-bottom:1.5rem">${roleBadge(u.role)}</div>
-        <div class="g2" style="text-align:left;background:var(--ink2);padding:1.5rem;border-radius:var(--r2)">
-          <div><div class="text-xs" style="color:var(--chalk3);margin-bottom:4px">อีเมล</div><div style="font-weight:600">${u.email}</div></div>
-          <div><div class="text-xs" style="color:var(--chalk3);margin-bottom:4px">รหัสนักศึกษา / รหัสพนักงาน</div><div style="font-weight:600">${u.student_id||'-'}</div></div>
-          <div><div class="text-xs" style="color:var(--chalk3);margin-bottom:4px">สาขา / แผนก</div><div style="font-weight:600">${u.department||'-'}</div></div>
-          <div><div class="text-xs" style="color:var(--chalk3);margin-bottom:4px">วันที่สมัคร</div><div style="font-weight:600">${fmtDate(u.created_at,true)}</div></div>
-        </div>
-      </div>
-    </div>
-    <div style="text-align:center">
-      <button class="btn btn-ghost" style="color:var(--red);border-color:rgba(255,71,87,0.3)" onclick="logout()">ออกจากระบบ</button>
-    </div>
-  </div>`;
-}

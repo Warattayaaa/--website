@@ -2,16 +2,15 @@
    PAGE: PROFILE & SECURITY
    Allows users to update info and change password
 ═══════════════════════════════════════ */
-async function pageProfile() {
-  const c = document.getElementById('page-content');
-  c.innerHTML = loadingState();
+async function pageProfile(navId) {
+  setLoading('profile', navId);
 
   try {
     const u = await apiFetch('/auth/me');
     APP.user = u; // Refresh local state
     saveApp();
 
-    c.innerHTML = `
+    renderContent(`
       <div style="max-width:800px;margin:0 auto">
         <div class="flex ic jb mb2">
           <div>
@@ -58,10 +57,14 @@ async function pageProfile() {
             <div class="text-xs" style="opacity:.8">สิทธิ์การใช้งานของคุณถูกกำหนดโดย Admin หากต้องการเปลี่ยนสิทธิ์กรุณาติดต่อผู้ดูแลระบบ</div>
           </div>
         </div>
-      </div>
-    `;
+
+        <!-- Logout Button Section -->
+        <div style="text-align:center;margin-top:3rem;padding-bottom:3rem">
+          <button class="btn btn-ghost" style="color:var(--red);border-color:rgba(255,71,87,0.3);padding:0.75rem 2rem" onclick="logout()">🚪 ออกจากระบบ</button>
+        </div>
+      </div>`, 'profile', navId);
   } catch (e) {
-    c.innerHTML = `<div class="alert al-danger">❌ ${e.message}</div>`;
+    renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'profile', navId);
   }
 }
 
@@ -79,7 +82,7 @@ async function updateProfile() {
       body: JSON.stringify({ name, student_id, department, phone })
     });
     toast(res.message);
-    pageProfile(); // Reload
+    pageProfile(LATEST_NAV_ID); // Reload
   } catch (e) { toast(e.message, 'err'); }
 }
 

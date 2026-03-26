@@ -47,6 +47,11 @@ router.post('/register', async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร' });
 
     const usersRef = db.collection('users');
+    
+    // Check for duplicate name
+    const nameSnap = await usersRef.where('name', '==', name).limit(1).get();
+    if (!nameSnap.empty) return res.status(409).json({ error: 'ชื่อนี้ถูกใช้งานแล้ว กรุณาใช้ชื่ออื่น' });
+
     const emailSnap = await usersRef.where('email', '==', email).limit(1).get();
     if (!emailSnap.empty) return res.status(409).json({ error: 'อีเมลนี้ถูกใช้งานแล้ว' });
 

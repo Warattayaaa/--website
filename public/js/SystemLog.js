@@ -2,27 +2,27 @@
    PAGE: SYSTEM LOG (AUDIT LOGS)
    Admin-only: view system activity
 ═══════════════════════════════════════ */
-async function pageSystemLog() {
+async function pageSystemLog(navId) {
   const c = document.getElementById('page-content');
   if (!['admin', 'manager'].includes(APP.user?.role)) {
-    c.innerHTML = `<div class="alert al-danger">❌ เฉพาะ Admin และ Manager เท่านั้น</div>`;
+    renderContent(`<div class="alert al-danger">❌ เฉพาะ Admin และ Manager เท่านั้น</div>`, 'system-log', navId);
     return;
   }
   
-  c.innerHTML = loadingState();
+  setLoading('system-log', navId);
   
   try {
     const data = await apiFetch('/audit-logs?limit=100');
     const logs = data.items;
     
-    c.innerHTML = `
+    renderContent(`
     <div style="max-width:960px">
-      <div class="flex ic jb mb2">
+      <div class="ic jb flex mb2">
         <div>
           <div style="font-size:1.1rem;font-weight:700;margin-bottom:.25rem">📋 บันทึกกิจกรรมระบบ (System Audit Log)</div>
           <div class="text-muted text-xs">ตรวจสอบความเคลื่อนไหวและการทำงานของระบบย้อนหลัง</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="pageSystemLog()">↺ รีเฟรช</button>
+        <button class="btn btn-ghost btn-sm" onclick="pageSystemLog(LATEST_NAV_ID)">↺ รีเฟรช</button>
       </div>
 
       <div class="card">
@@ -52,9 +52,9 @@ async function pageSystemLog() {
           </table>
         </div>
       </div>
-    </div>`;
+    </div>`, 'system-log', navId);
   } catch (e) {
-    c.innerHTML = `<div class="alert al-danger">❌ ${e.message}</div>`;
+    renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'system-log', navId);
   }
 }
 

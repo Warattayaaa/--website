@@ -1,15 +1,17 @@
-/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
+import base64
+content = """/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
 /* ═══════════════════════════════════════
    PAGE: REQUESTS LIST
 ═══════════════════════════════════════ */
 let _flt={};
-async function pageRequestsList(flt={}, navId){
+async function pageRequestsList(flt={}){
   _flt=flt;
-  setLoading('requests-list', navId);
-
+  const c=document.getElementById('page-content');
   const role=APP.user.role;
   const canCreate=['user','manager','admin'].includes(role);
   const canAssign=['manager','admin'].includes(role);
+
+  c.innerHTML = loadingState();
 
   try {
     let q = new URLSearchParams(flt).toString();
@@ -64,15 +66,15 @@ async function pageRequestsList(flt={}, navId){
           }).join(''):`<tr><td colspan="${canAssign?9:8}">${emptyState('📭','ไม่มีรายการที่ตรงกับเงื่อนไข')}</td></tr>`}
         </tbody>
       </table></div>
-    </div>`, 'requests-list', navId);
-  } catch(e){ renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'requests-list', navId); }
+    </div>`, 'requests-list');
+  } catch(e){ renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'requests-list'); }
 }
 
 function applyF(){
   const f={};
   const s=document.getElementById('f-s')?.value;const st=document.getElementById('f-st')?.value;const ct=document.getElementById('f-ct')?.value;const ur=document.getElementById('f-ur')?.value;
   if(s)f.search=s;if(st)f.status=st;if(ct)f.category=ct;if(ur)f.urgency=ur;
-  pageRequestsList(f, LATEST_NAV_ID);
+  pageRequestsList(f);
 }
 
 async function openAssignModal(reqId,tid){
@@ -95,17 +97,18 @@ async function doAssign(reqId){
     const res = await apiFetch(`/requests/${reqId}/assign`, { method:'PATCH', body:JSON.stringify({ tech_id: techId }) });
     toast(res.message);
     closeModal();
-    pageRequestsList(_flt, LATEST_NAV_ID);
+    pageRequestsList(_flt);
   } catch(e){ toast(e.message, 'err'); }
 }
 
 let _locData={};
-function pageNewRequest(navId){
+function pageNewRequest(){
+  const c=document.getElementById('page-content');
   const buildings=['อาคาร A','อาคาร B','อาคาร C','อาคาร D'];
   const locMap={'อาคาร A':{floor:['ชั้น 1','ชั้น 2','ชั้น 3'],rooms:{'ชั้น 1':['ห้อง 101','ห้อง 102','ห้อง 103'],'ชั้น 2':['ห้อง 201','ห้อง 202'],'ชั้น 3':['ห้อง 301']}},'อาคาร B':{floor:['ชั้น 1','ชั้น 2'],rooms:{'ชั้น 1':['ห้องปฏิบัติการ 1','ห้องปฏิบัติการ 2'],'ชั้น 2':['ห้องประชุม','ห้องอาจารย์']}},'อาคาร C':{floor:['ชั้น 1','ชั้น 2'],rooms:{'ชั้น 1':['สำนักงาน','ห้องน้ำ ชั้น 1'],'ชั้น 2':['ห้องผู้อำนวยการ']}},'อาคาร D':{floor:['ชั้น 1','ชั้น 2','ชั้น 3'],rooms:{'ชั้น 1':['ห้องพัก 101','ห้องพัก 102'],'ชั้น 2':['ห้องพัก 201','ห้องพัก 202'],'ชั้น 3':['ห้องพัก 301']}}};
   _locData=locMap;
 
-  renderContent(`
+  c.innerHTML=`
   <div style="max-width:720px;margin:0 auto">
     <div class="card">
       <div class="card-h"><div class="card-t">➕ แบบฟอร์มแจ้งซ่อม</div><button class="btn btn-ghost btn-sm" onclick="switchPage('requests-list')">← กลับ</button></div>
@@ -114,7 +117,7 @@ function pageNewRequest(navId){
         <div style="margin-bottom:1.5rem">
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--chalk3);margin-bottom:.75rem">1. ประเภทปัญหา</div>
           <div class="cat-grid">
-            ${[['ไฟฟ้า','⚡'],['ประปา','💧'],['โครงสร้าง','🏗️'],['อุปกรณ์อิเล็กทรอนิกส์','💻'],['เครื่องปรับอากาศ','❄️']].map(([cat,ico])=>`
+            ${[['ไฟฟ้า','⚡'],['ประปา','💧'],['โครงสร้าง','��️'],['อุปกรณ์อิเล็กทรอนิกส์','💻'],['เครื่องปรับอากาศ','❄️']].map(([cat,ico])=>`
             <div class="catcard" id="c-${cat}" onclick="selCat('${cat}',this)">
               <div class="cc-i">${ico}</div><div class="cc-t">${cat}</div>
             </div>`).join('')}
@@ -147,17 +150,17 @@ function pageNewRequest(navId){
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--chalk3);margin-bottom:.75rem">5. แนบรูปภาพ (ถ้ามี)</div>
           <div class="flex ic gap2" style="background:var(--ink3);padding:1rem;border-radius:var(--r);border:1px dashed var(--wire)">
             <label for="req-photo" class="btn btn-ghost" style="margin:0">📷 เลือกรูปภาพ</label>
-            <input type="file" id="req-photo" accept="image/*" style="display:none" onchange="previewImg(this, 'req-photo-preview')">
+            <input type="file" id="req-photo" style="display:none" onchange="previewImg(this, 'req-photo-preview')">
             <div id="req-photo-preview" class="text-xs text-muted">ไม่ได้เลือกไฟล์</div>
           </div>
         </div>
         <div style="display:flex;gap:.5rem;justify-content:flex-end">
           <button class="btn btn-ghost" onclick="switchPage('requests-list')">ยกเลิก</button>
-          <button class="btn btn-primary btn-lg" onclick="submitReq(${navId})" id="btn-submit-req">📨 ส่งคำขอแจ้งซ่อม</button>
+          <button class="btn btn-primary btn-lg" onclick="submitReq()" id="btn-submit-req">📨 ส่งคำขอแจ้งซ่อม</button>
         </div>
       </div>
     </div>
-  </div>`, 'request-new', navId);
+  </div>`;
 }
 
 function selCat(v,el){document.querySelectorAll('.catcard').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');document.getElementById('req-cat').value=v;}
@@ -176,7 +179,7 @@ function upRoom(){
   rs.innerHTML='<option value="">-- เลือก --</option>'+rooms.map(r=>`<option>${r}</option>`).join('');
   rs.disabled=!rooms.length;
 }
-async function submitReq(navId){
+async function submitReq(){
   const cat=document.getElementById('req-cat').value;
   const desc=document.getElementById('req-desc').value.trim();
   const urg=document.getElementById('req-urg').value;
@@ -194,10 +197,7 @@ async function submitReq(navId){
     let photoUrl = null;
     const photoInput = document.getElementById('req-photo');
     if (photoInput && photoInput.files[0]) {
-      const f = photoInput.files[0];
-      if (!f.type.startsWith('image/')) { toast('กรุณาเลือกเฉพาะไฟล์รูปภาพ', 'warn'); btn.disabled = false; btn.innerHTML = '📨 ส่งคำขอแจ้งซ่อม'; return; }
-      if (f.size > 5 * 1024 * 1024) { toast('ขนาดรูปภาพต้องไม่เกิน 5MB', 'warn'); btn.disabled = false; btn.innerHTML = '📨 ส่งคำขอแจ้งซ่อม'; return; }
-      const uploadRes = await uploadMedia(f);
+      const uploadRes = await uploadMedia(photoInput.files[0]);
       photoUrl = uploadRes.url;
     }
     const res = await apiFetch('/requests', {
@@ -222,18 +222,17 @@ async function submitReq(navId){
           <button class="btn btn-ghost" onclick="switchPage('track')">🔍 ติดตามงาน</button>
           <button class="btn btn-primary" onclick="switchPage('requests-list')">📋 ดูรายการ</button>
         </div>
-      </div>`, 'request-new', navId);
+      </div>`, 'request-new');
   } catch(e) {
-    if (document.getElementById('req-alert')) {
-      document.getElementById('req-alert').innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`;
-    }
+    alertEl.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`;
     document.getElementById('btn-submit-req').disabled = false;
     document.getElementById('btn-submit-req').innerHTML = '📨 ส่งคำขอแจ้งซ่อม';
   }
 }
 
-async function pageRequestDetail(id, navId){
-  setLoading('request-detail', navId);
+async function pageRequestDetail(id){
+  const c=document.getElementById('page-content');
+  c.innerHTML = loadingState();
   try {
     const r = await apiFetch(`/requests/${id}`);
     const role=APP.user.role;
@@ -258,7 +257,7 @@ async function pageRequestDetail(id, navId){
           ${canEval?`<button class="btn btn-primary btn-sm" style="background:var(--amber);color:#000;border-color:var(--amber)" onclick="openEvalModal('${r.id}')">⭐ ประเมินงาน</button>`:''}
         </div>
       </div>
-      <div class=" card mb">
+      <div class="card mb">
         <div class="card-h">
           <div><div class="flex ic gap1"><span class="tid">${r.tracking_id}</span>${overdue?'<span class="badge b-red">⏰ เกิน SLA</span>':''}</div><div class="text-muted text-xs" style="margin-top:3px">${catIcon(r.category)} ${r.category} · แจ้งเมื่อ ${fmtDate(r.created_at)}</div></div>
           <div class="flex gap1">${uBadge(r.urgency)} ${sBadge(r.status)}</div>
@@ -347,8 +346,8 @@ async function pageRequestDetail(id, navId){
           ${eval_.comment?`<div class="alert al-info mt2">💬 "${eval_.comment}"</div>`:''}
         </div>
       </div>`:''}
-    </div>`, 'request-detail', navId);
-  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'request-detail', navId); }
+    </div>`, 'request-detail');
+  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'request-detail'); }
 }
 
 function openStatusModal(reqId){
@@ -363,7 +362,7 @@ function openStatusModal(reqId){
         <label class="fl">📸 รูปก่อนซ่อม</label>
         <div class="flex ic gap1" style="background:var(--ink3);padding:.5rem;border-radius:var(--r);border:1px dashed var(--wire)">
           <label for="img-before" class="btn btn-ghost btn-xs">📁 เลือก</label>
-          <input type="file" id="img-before" accept="image/*" style="display:none" onchange="previewImg(this, 'pre-before')">
+          <input type="file" id="img-before" style="display:none" onchange="previewImg(this, 'pre-before')">
           <div id="pre-before" class="text-xs"></div>
         </div>
       </div>
@@ -371,7 +370,7 @@ function openStatusModal(reqId){
         <label class="fl">📸 รูปหลังซ่อม</label>
         <div class="flex ic gap1" style="background:var(--ink3);padding:.5rem;border-radius:var(--r);border:1px dashed var(--wire)">
           <label for="img-after" class="btn btn-ghost btn-xs">📁 เลือก</label>
-          <input type="file" id="img-after" accept="image/*" style="display:none" onchange="previewImg(this, 'pre-after')">
+          <input type="file" id="img-after" style="display:none" onchange="previewImg(this, 'pre-after')">
           <div id="pre-after" class="text-xs"></div>
         </div>
       </div>
@@ -388,19 +387,6 @@ async function doUpdateStatus(reqId){
     let beforeUrl = null, afterUrl = null;
     const fBefore = document.getElementById('img-before').files[0];
     const fAfter = document.getElementById('img-after').files[0];
-
-    const validate = (f) => {
-      if (!f) return true;
-      if (!f.type.startsWith('image/')) { toast('กรุณาเลือกเฉพาะไฟล์รูปภาพเท่านั้น', 'warn'); return false; }
-      if (f.size > 5 * 1024 * 1024) { toast('ไฟล์รูปภาพต้องมีขนาดไม่เกิน 5MB', 'warn'); return false; }
-      return true;
-    };
-
-    if (!validate(fBefore) || !validate(fAfter)) {
-      btn.disabled = false; btn.innerHTML = '✅ บันทึก';
-      return;
-    }
-
     if (fBefore) { const res = await uploadMedia(fBefore); beforeUrl = res.url; }
     if (fAfter) { const res = await uploadMedia(fAfter); afterUrl = res.url; }
     const body = { status, repair_detail:rd };
@@ -409,7 +395,7 @@ async function doUpdateStatus(reqId){
     const res = await apiFetch(`/requests/${reqId}/status`, { method:'PATCH', body:JSON.stringify(body) });
     toast(res.message);
     closeModal();
-    pageRequestDetail(reqId, LATEST_NAV_ID);
+    pageRequestDetail(reqId);
   } catch(e){ 
     toast(e.message, 'err'); 
     btn.disabled = false; btn.innerHTML = '✅ บันทึก';
@@ -436,13 +422,12 @@ async function doEval(reqId){
     const res = await apiFetch('/evaluations', { method:'POST', body:JSON.stringify({ request_id:reqId, quality_score:q, speed_score:sp, service_score:sv, comment:cm }) });
     toast(res.message);
     closeModal();
-    pageRequestDetail(reqId, LATEST_NAV_ID);
+    pageRequestDetail(reqId);
   } catch(e){ toast(e.message, 'err'); }
 }
 
-function pageTrack(navId){
-  setLoading('track', navId);
-  renderContent(`
+function pageTrack(){
+  document.getElementById('page-content').innerHTML=`
   <div style="max-width:600px;margin:0 auto">
     <div class="card">
       <div class="card-h"><div class="card-t">🔍 ติดตามสถานะงานซ่อม</div></div>
@@ -453,7 +438,7 @@ function pageTrack(navId){
         <div id="track-result"></div>
       </div>
     </div>
-  </div>`, 'track', navId);
+  </div>`;
 }
 
 async function doTrack(){
@@ -461,8 +446,6 @@ async function doTrack(){
   const el=document.getElementById('track-result');
   if(!id){el.innerHTML=`<div class="alert al-warn">⚠️ กรุณากรอก Tracking ID</div>`;return;}
   el.innerHTML = loadingState();
-  const trackNavId = LATEST_NAV_ID; 
-
   try {
     const r = await apiFetch(`/requests/track/${id}`);
     const statusOrder=['รอดำเนินการ','กำลังดำเนินการ','รอตรวจสอบ','เสร็จสมบูรณ์'];
@@ -492,9 +475,9 @@ async function doTrack(){
           </div>
           ${i<statusOrder.length-1?`<div class="tl-line ${i<si?'done':''}"></div>`:''}`).join('')}
       </div>
-      ${r.repair_detail?`<div class="alert al-info mt2">🔧 ${r.repair_detail}</div>`:''}`, 'track', trackNavId);
+      ${r.repair_detail?`<div class="alert al-info mt2">🔧 ${r.repair_detail}</div>`:''}`, 'track');
   } catch(e) {
-    renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'track', trackNavId);
+    renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'track');
   }
 }
 
@@ -521,7 +504,7 @@ async function openWithdrawModal(reqId) {
 function upWUnit() {
   const sel = document.getElementById('w-mat');
   const opt = sel.options[sel.selectedIndex];
-  if (opt) document.getElementById('w-unit-lbl').innerText = opt.dataset.unit || '-';
+  document.getElementById('w-unit-lbl').innerText = opt.dataset.unit || '-';
 }
 
 async function doWithdraw(reqId) {
@@ -532,7 +515,7 @@ async function doWithdraw(reqId) {
     const res = await apiFetch(`/requests/${reqId}/materials`, { method:'POST', body:JSON.stringify({ material_id: mid, quantity_used: qty }) });
     toast(res.message);
     closeModal();
-    pageRequestDetail(reqId, LATEST_NAV_ID);
+    pageRequestDetail(reqId);
   } catch(e){ toast(e.message, 'err'); }
 }
 
@@ -541,25 +524,23 @@ async function deleteWithdraw(reqId, mid) {
   try {
     const res = await apiFetch(`/requests/${reqId}/materials/${mid}`, { method:'DELETE' });
     toast(res.message);
-    pageRequestDetail(reqId, LATEST_NAV_ID);
+    pageRequestDetail(reqId);
   } catch(e){ toast(e.message, 'err'); }
 }
 
 async function doAutoAssign(reqId) {
   const btn = document.getElementById('btn-auto-assign');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '🤖 ประมวลผล...';
-  }
+  btn.disabled = true;
+  btn.innerHTML = '🤖 ประมวลผล...';
   try {
     const res = await apiFetch(`/requests/${reqId}/auto-assign`, { method:'POST' });
     toast(res.message);
-    pageRequestDetail(reqId, LATEST_NAV_ID);
+    pageRequestDetail(reqId);
   } catch(e){ 
     toast(e.message, 'err');
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '🤖 Auto-Assign';
-    }
+    btn.disabled = false;
+    btn.innerHTML = '🤖 Auto-Assign';
   }
-}
+}"""
+with open("public/js/Requests.js", "wb") as f:
+    f.write(content.encode("utf-8"))

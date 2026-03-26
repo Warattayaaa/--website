@@ -19,6 +19,13 @@ router.post('/upload', authenticate, (req, res) => {
 
     busboy.on('file', (name, file, info) => {
       const { filename, encoding, mimeType } = info;
+      
+      // Enforce image-only check
+      if (!mimeType.startsWith('image/')) {
+        file.resume(); // Skip this file
+        return res.status(400).json({ error: 'อนุญาตให้อัปโหลดเฉพาะไฟล์รูปภาพเท่านั้น' });
+      }
+
       fileFound = true;
       originalName = filename;
       contentType = mimeType;
@@ -37,12 +44,17 @@ router.post('/upload', authenticate, (req, res) => {
         writeStream.on('error', reject);
       });
 
+      file.on('limit', () => {
+        return res.status(400).json({ error: 'ขนาดไฟล์เกินกำหนด (สูงสุด 5MB)' });
+      });
+
       file.pipe(writeStream);
     });
 
     busboy.on('finish', async () => {
+      if (res.headersSent) return;
       if (!fileFound) {
-        return res.status(400).json({ error: 'กรุณาแนบไฟล์รูปภาพ' });
+        return res.status(400).json({ error: 'ไม่พบไฟล์รูปภาพที่ต้องการอัปโหลด' });
       }
 
       try {

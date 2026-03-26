@@ -42,7 +42,6 @@ graph TD
     
     subgraph "ความปลอดภัย (Security)"
         Auth[JWT Authentication]
-        Rate[Rate Limiting]
         Rules[Firestore Rules: Deny All]
         Helm[Helmet Security Headers]
     end
@@ -102,9 +101,8 @@ graph TD
 
 ### 5.1 ระบบความปลอดภัย
 1.  **JWT Authentication:** ข้อมูลผู้ใช้ถูกเข้ารหัสใน Token อายุ 7 วัน
-2.  **Rate Limiting:** จำกัดการ Login ผิดเกิน 10 ครั้งใน 15 นาที เพื่อป้องกัน Brute-force
-3.  **NoSQL Security:** `firestore.rules` ถูกตั้งค่าเป็น `Deny All` เพื่อบังคับให้เข้าข้อมูลผ่าน API ที่มีการตรวจสอบสิทธิ์เท่านั้น
-4.  **HTTPS / Helmet:** ระบบบังคับใช้ HTTPS และมี Security Headers ป้องกันการโจมตีเว็บพื้นฐาน
+2.  **NoSQL Security:** `firestore.rules` ถูกตั้งค่าเป็น `Deny All` เพื่อบังคับให้เข้าข้อมูลผ่าน API ที่มีการตรวจสอบสิทธิ์เท่านั้น
+3.  **HTTPS / Helmet:** ระบบบังคับใช้ HTTPS และมี Security Headers ป้องกันการโจมตีเว็บพื้นฐาน
 
 ### 5.2 คู่มือการตั้งค่า SMTP (Email)
 เพื่อให้การแจ้งเตือนทำงานได้จริง กรุณาไปที่หน้า **"ตั้งค่าระบบ"** และกรอกข้อมูลดังนี้:
