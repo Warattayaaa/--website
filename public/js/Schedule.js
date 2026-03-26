@@ -3,15 +3,14 @@
 ═══════════════════════════════════════ */
 let SCH_YEAR, SCH_MONTH, SCH_DATA = {};
 
-async function pageSchedule(){
-  const c=document.getElementById('page-content');
+async function pageSchedule(navId){
   const role=APP.user?.role;
   const canManage=['admin','manager'].includes(role);
   const now=new Date();
   SCH_YEAR  = SCH_YEAR  || now.getFullYear();
   SCH_MONTH = SCH_MONTH || now.getMonth()+1;
 
-  c.innerHTML=`
+  renderContent(`
   <div class="flex jb ic mb2" style="flex-wrap:wrap;gap:.75rem">
     <div>
       <div style="font-size:1.1rem;font-weight:700">📅 ตารางงานช่างและการลา</div>
@@ -35,12 +34,12 @@ async function pageSchedule(){
   <div id="sch-cal"><div class="card"><div class="card-b">${loadingState()}</div></div></div>
   <div id="sch-leaves" style="display:none"><div class="card"><div class="card-b">${loadingState()}</div></div></div>
   ${canManage?`<div id="sch-oncall" style="display:none"><div class="card"><div class="card-b">${loadingState()}</div></div></div>`:''}
-  `;
+  `, 'schedule', navId);
 
-  await loadSchData();
+  await loadSchData(navId);
 }
 
-async function loadSchData(){
+async function loadSchData(navId){
   const role=APP.user?.role;
   const canManage=['admin','manager'].includes(role);
   const titleEl=document.getElementById('sch-title');
@@ -52,6 +51,8 @@ async function loadSchData(){
     renderLeavesList(data.leaves || [], canManage, role);
     if(canManage) renderOncallTab(data.oncall || [], data.technicians || []);
   } catch(e){
+    // If navigation changed, don't update sub-sections
+    if (navId !== LATEST_NAV_ID) return;
     ['cal','leaves','oncall'].forEach(t=>{
       const el=document.getElementById('sch-'+t);
       if(el) el.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`;
@@ -63,7 +64,7 @@ function schNav(dir){
   SCH_MONTH += dir;
   if(SCH_MONTH > 12){ SCH_MONTH=1; SCH_YEAR++; }
   if(SCH_MONTH < 1){ SCH_MONTH=12; SCH_YEAR--; }
-  loadSchData();
+  loadSchData(LATEST_NAV_ID);
 }
 
 function switchSchTab(btn, tab){
@@ -149,8 +150,7 @@ function showDayDetail(dateKey){
   const { schedules=[], leaves=[], oncall=[] } = SCH_DATA||{};
   const role=APP.user?.role;
   const canManage=['admin','manager'].includes(role);
-  const myId=String(APP.user.id);
-
+  
   const daySchEntries = schedules.filter(s=>isoToDateKey(s.date)===dateKey);
   const dayLeaveEntries = leaves.filter(l=>{
     const s=isoToDateKey(l.start_date), e=isoToDateKey(l.end_date);
@@ -175,7 +175,7 @@ function showDayDetail(dateKey){
     ${dayOncall.map(o=>`
       <div class="flex jb ic mb1">
         <span class="badge b-red">🚨 ${o.tech_name}</span>
-        ${canManage?`<button class="btn btn-danger btn-sm" onclick="deleteOncall('${o.id}','${dateKey}')">✕</button>`:''}
+        ${canManage?`<button class="btn btn-danger btn-sm" onclick="deleteOncall('${o.id}')">✕</button>`:''}
       </div>`).join('')}`:''}
     ${dayLeaveEntries.length?`
     <div style="font-weight:700;font-size:.82rem;margin:.75rem 0 .5rem">🏖️ วันลา</div>
@@ -238,13 +238,13 @@ async function submitSchEntry(){
   if(!tech_id||!date){ toast('กรุณาเลือกช่างและวันที่','warn'); return; }
   try {
     const r=await apiFetch('/schedule',{method:'POST',body:JSON.stringify({tech_id,tech_name,date,shift,type,note})});
-    toast(r.message); closeModal(); loadSchData();
+    toast(r.message); closeModal(); loadSchData(LATEST_NAV_ID);
   } catch(e){ toast(e.message,'err'); }
 }
 
 async function deleteSchEntry(id, dateKey){
   if(!confirm('ลบตารางงานนี้?')) return;
-  try { const r=await apiFetch(`/schedule/${id}`,{method:'DELETE'}); toast(r.message); closeModal(); loadSchData(); } catch(e){ toast(e.message,'err'); }
+  try { const r=await apiFetch(`/schedule/${id}`,{method:'DELETE'}); toast(r.message); closeModal(); loadSchData(LATEST_NAV_ID); } catch(e){ toast(e.message,'err'); }
 }
 
 /* ─────── On-Call Modal ─────── */
@@ -275,13 +275,13 @@ async function submitOncall(){
   if(!tech_id||!date){ toast('กรุณาเลือกช่างและวันที่','warn'); return; }
   try {
     const r=await apiFetch('/schedule/oncall',{method:'POST',body:JSON.stringify({tech_id,tech_name,date,note})});
-    toast(r.message); closeModal(); loadSchData();
+    toast(r.message); closeModal(); loadSchData(LATEST_NAV_ID);
   } catch(e){ toast(e.message,'err'); }
 }
 
 async function deleteOncall(id){
   if(!confirm('ลบเวรฉุกเฉินนี้?')) return;
-  try { const r=await apiFetch(`/schedule/oncall/${id}`,{method:'DELETE'}); toast(r.message); closeModal(); loadSchData(); } catch(e){ toast(e.message,'err'); }
+  try { const r=await apiFetch(`/schedule/oncall/${id}`,{method:'DELETE'}); toast(r.message); closeModal(); loadSchData(LATEST_NAV_ID); } catch(e){ toast(e.message,'err'); }
 }
 
 /* ─────── Leave Modal ─────── */
@@ -313,12 +313,12 @@ async function submitLeave(){
   if(!start_date){ toast('กรุณาระบุวันที่','warn'); return; }
   try {
     const r=await apiFetch('/schedule/leaves',{method:'POST',body:JSON.stringify({start_date,end_date,type,reason})});
-    toast(r.message); closeModal(); loadSchData();
+    toast(r.message); closeModal(); loadSchData(LATEST_NAV_ID);
   } catch(e){ toast(e.message,'err'); }
 }
 
 /* ─────── Leave List Tab ─────── */
-function renderLeavesList(leaves, canManage){
+function renderLeavesList(leaves, canManage, role){
   const el=document.getElementById('sch-leaves');
   if(!el) return;
   const statusColor={'รออนุมัติ':'b-amber','อนุมัติ':'b-green','ไม่อนุมัติ':'b-red'};
@@ -326,7 +326,7 @@ function renderLeavesList(leaves, canManage){
   <div class="card">
     <div class="card-h" style="display:flex;justify-content:space-between;align-items:center">
       <div class="card-t">📝 คำขอลาทั้งหมด</div>
-      ${APP.user?.role==='technician'?`<button class="btn btn-primary btn-sm" onclick="openLeaveModal()">➕ ขอลาใหม่</button>`:''}
+      ${role==='technician'?`<button class="btn btn-primary btn-sm" onclick="openLeaveModal()">➕ ขอลาใหม่</button>`:''}
     </div>
     <div class="tw"><table>
       <thead><tr><th>ชื่อช่าง</th><th>ประเภท</th><th>วันเริ่มลา</th><th>วันสิ้นสุด</th><th>เหตุผล</th><th>สถานะ</th>${canManage?'<th>จัดการ</th>':''}</tr></thead>
@@ -350,7 +350,7 @@ function renderLeavesList(leaves, canManage){
 
 async function approveLeave(id, status){
   if(!confirm(`${status==='อนุมัติ'?'อนุมัติ':'ปฏิเสธ'}คำขอลานี้?`)) return;
-  try { const r=await apiFetch(`/schedule/leaves/${id}`,{method:'PATCH',body:JSON.stringify({status})}); toast(r.message); loadSchData(); } catch(e){ toast(e.message,'err'); }
+  try { const r=await apiFetch(`/schedule/leaves/${id}`,{method:'PATCH',body:JSON.stringify({status})}); toast(r.message); loadSchData(LATEST_NAV_ID); } catch(e){ toast(e.message,'err'); }
 }
 
 /* ─────── On-Call Tab ─────── */

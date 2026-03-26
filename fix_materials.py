@@ -1,13 +1,14 @@
-/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
+import base64
+content = """/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
 /* ═══════════════════════════════════════
    PAGE: MATERIALS
 ═══════════════════════════════════════ */
-async function pageMaterials(navId){
+async function pageMaterials(){
   const c=document.getElementById('page-content');
   const dRole=APP.user.role;
   const canEdit=['admin','manager'].includes(dRole);
 
-  setLoading('materials', navId);
+  c.innerHTML = loadingState();
 
   try {
     const data = await apiFetch('/materials');
@@ -48,16 +49,16 @@ async function pageMaterials(navId){
         }).join(''):`<tr><td colspan="${canEdit?7:6}">${emptyState('📦','ไม่มีวัสดุในคลัง')}</td></tr>`}
         </tbody>
       </table></div>
-    </div>`, 'materials', navId);
-  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'materials', navId); }
+    </div>`, 'materials');
+  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'materials'); }
 }
 
 async function deleteMat(id, name){
-  if(!confirm(`⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบวัสดุ "${name}"? \nการลบนี้จะไม่สามารถย้อนกลับได้`)) return;
+  if(!confirm(`⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบวัสดุ "${name}"? \\nการลบนี้จะไม่สามารถย้อนกลับได้`)) return;
   try {
     const res = await apiFetch(`/materials/${id}`, { method:'DELETE' });
     toast(res.message);
-    pageMaterials(LATEST_NAV_ID);
+    pageMaterials();
   } catch(e) { toast(e.message, 'err'); }
 }
 
@@ -68,23 +69,23 @@ function filtMat(v){
 
 function openMatModal(m=null){
   const t=m?'✏️ แก้ไขวัสดุ':'➕ เพิ่มวัสดุ';
-  openModal(`<div class="modal"><div class="mh"><div class="mt">${t}</div><button class="mx" onclick="closeModal()">✕</button></div>
+  openModal(\`<div class="modal"><div class="mh"><div class="mt">\${t}</div><button class="mx" onclick="closeModal()">✕</button></div>
   <div class="mb2">
     <div class="frow">
-      <div class="fg"><label class="fl">ชื่อวัสดุ <span class="req">*</span></label><input class="fc" id="m-nm" value="${m?m.name:''}"></div>
-      <div class="fg"><label class="fl">รหัส (SKU)</label><input class="fc" id="m-cd" value="${m?m.code||'':''}"></div>
+      <div class="fg"><label class="fl">ชื่อวัสดุ <span class="req">*</span></label><input class="fc" id="m-nm" value="\${m?m.name:''}"></div>
+      <div class="fg"><label class="fl">รหัส (SKU)</label><input class="fc" id="m-cd" value="\${m?m.code||'':''}"></div>
     </div>
     <div class="frow3">
-      <div class="fg"><label class="fl">หมวดหมู่</label><select class="fc" id="m-cat"><option value="">-- เลือก --</option>${['ไฟฟ้า','ประปา','ฮาร์ดแวร์','อิเล็กทรอนิกส์','ทั่วไป'].map(c=>`<option${m&&m.category===c?' selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="fg"><label class="fl">หน่วยเรียก</label><input class="fc" id="m-un" value="${m?m.unit||'ชิ้น':'ชิ้น'}"></div>
-      <div class="fg"><label class="fl">ราคา/หน่วย <span class="req">*</span></label><input class="fc" id="m-pr" type="number" value="${m?m.unit_price||0:0}" min="0" step="0.01"></div>
+      <div class="fg"><label class="fl">หมวดหมู่</label><select class="fc" id="m-cat"><option value="">-- เลือก --</option>\${['ไฟฟ้า','ประปา','ฮาร์ดแวร์','อิเล็กทรอนิกส์','ทั่วไป'].map(c=>\`<option\${m&&m.category===c?' selected':''}>\${c}</option>\`).join('')}</select></div>
+      <div class="fg"><label class="fl">หน่วยเรียก</label><input class="fc" id="m-un" value="\${m?m.unit||'ชิ้น':'ชิ้น'}"></div>
+      <div class="fg"><label class="fl">ราคา/หน่วย <span class="req">*</span></label><input class="fc" id="m-pr" type="number" value="\${m?m.unit_price||0:0}" min="0" step="0.01"></div>
     </div>
-    <div class="frow" ${m?'style="display:none"':''}>
-      <div class="fg"><label class="fl">จำนวนตั้งต้น <span class="req">*</span></label><input class="fc" id="m-st" type="number" value="${m?m.quantity:0}" min="0"></div>
-      <div class="fg"><label class="fl">จุดสั่งซื้อ (Min Stock)</label><input class="fc" id="m-min" type="number" value="${m?m.reorder_point||5:5}" min="0"></div>
+    <div class="frow" \${m?'style="display:none"':''}>
+      <div class="fg"><label class="fl">จำนวนตั้งต้น <span class="req">*</span></label><input class="fc" id="m-st" type="number" value="\${m?m.quantity:0}" min="0"></div>
+      <div class="fg"><label class="fl">จุดสั่งซื้อ (Min Stock)</label><input class="fc" id="m-min" type="number" value="\${m?m.reorder_point||5:5}" min="0"></div>
     </div>
   </div>
-  <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="saveMat('${m?m.id:''}')">✅ บันทึก</button></div></div>`);
+  <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="saveMat('\${m?m.id:''}')">✅ บันทึก</button></div></div>\`);
 }
 
 async function saveMat(id){
@@ -108,21 +109,21 @@ async function saveMat(id){
     const res = await apiFetch(url, { method, body:JSON.stringify(payload) });
     toast(res.message);
     closeModal();
-    pageMaterials(LATEST_NAV_ID);
+    pageMaterials();
   } catch(e) { toast(e.message, 'err'); }
 }
 
 function openStockModal(id,name,cur){
-  openModal(`<div class="modal"><div class="mh"><div class="mt">📦 ปรับปรุงสต็อก</div><button class="mx" onclick="closeModal()">✕</button></div>
+  openModal(\`<div class="modal"><div class="mh"><div class="mt">📦 ปรับปรุงสต็อก</div><button class="mx" onclick="closeModal()">✕</button></div>
   <div class="mb2">
-    <div class="alert al-info mb2">วัสดุ: <strong>${name}</strong><br>คงเหลือปัจจุบัน: <strong>${cur}</strong></div>
+    <div class="alert al-info mb2">วัสดุ: <strong>\${name}</strong><br>คงเหลือปัจจุบัน: <strong>\${cur}</strong></div>
     <div class="frow">
       <div class="fg"><label class="fl">ประเภทรายการ</label><select class="fc" id="st-t"><option value="in">➕ รับเข้า (เพิ่ม)</option><option value="out">เบิกออก (ลด)</option></select></div>
       <div class="fg"><label class="fl">จำนวน</label><input class="fc" id="st-qty" type="number" min="1" value="1"></div>
     </div>
     <div class="fg"><label class="fl">หมายเหตุ / อ้างอิง</label><input class="fc" id="st-rem" placeholder="เช่น สั่งซื้อลอต PR-2024 / เบิกซ่อม TRK-001"></div>
   </div>
-  <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="saveStock('${id}')">✅ ยืนยัน</button></div></div>`);
+  <div class="mf"><button class="btn btn-ghost" onclick="closeModal()">ยกเลิก</button><button class="btn btn-primary" onclick="saveStock('\${id}')">✅ ยืนยัน</button></div></div>\`);
 }
 
 async function saveStock(id){
@@ -133,9 +134,11 @@ async function saveStock(id){
   
   try {
     const action = t === 'in' ? 'add' : 'subtract';
-    const res = await apiFetch(`/materials/${id}/stock`, { method:'PATCH', body:JSON.stringify({ action, amount: q, reason: r }) });
+    const res = await apiFetch(\`/materials/\${id}/stock\`, { method:'PATCH', body:JSON.stringify({ action, amount: q, reason: r }) });
     toast(res.message);
     closeModal();
-    pageMaterials(LATEST_NAV_ID);
+    pageMaterials();
   } catch(e) { toast(e.message, 'err'); }
-}
+}"""
+with open("public/js/Materials.js", "wb") as f:
+    f.write(content.encode("utf-8"))

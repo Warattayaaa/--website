@@ -2,15 +2,15 @@
    PAGE: UNIFIED SETTINGS (ADMIN/MANAGER)
    Consolidates SMTP, User Management, and Activity Logs
 ═══════════════════════════════════════ */
-async function pageSettings() {
+async function pageSettings(navId) {
   const c = document.getElementById('page-content');
   const role = APP.user?.role;
   if (!['admin', 'manager'].includes(role)) {
-    c.innerHTML = `<div class="alert al-danger">❌ เฉพาะ Admin และ Manager เท่านั้น</div>`;
+    renderContent(`<div class="alert al-danger">❌ เฉพาะ Admin และ Manager เท่านั้น</div>`, 'settings', navId);
     return;
   }
 
-  c.innerHTML = loadingState();
+  setLoading('settings', navId);
 
   try {
     const [cfg, users, logData] = await Promise.all([
@@ -21,7 +21,7 @@ async function pageSettings() {
 
     const logs = logData.items;
 
-    c.innerHTML = `
+    renderContent(`
     <div style="max-width:1080px; margin: 0 auto;">
       <div class="flex ic jb mb2">
         <div>
@@ -148,10 +148,9 @@ async function pageSettings() {
         </div>
       </div>
       ` : ''}
-    </div>
-  `;
+    </div>`, 'settings', navId);
   } catch (e) {
-    c.innerHTML = `<div class="alert al-danger">❌ ${e.message}</div>`;
+    renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'settings', navId);
   }
 }
 

@@ -17,10 +17,21 @@ async function apiFetch(endpoint, options = {}) {
     delete headers['Content-Type']; 
   }
 
-  const res = await fetch(getApiUrl(endpoint), { ...options, headers: { ...headers, ...options.headers } });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Server Error');
-  return data;
+  // Use the navigation signal if available, unless overridden
+  const signal = options.signal || NAV_ABORT_CONTROLLER?.signal;
+
+  try {
+    const res = await fetch(getApiUrl(endpoint), { ...options, signal, headers: { ...headers, ...options.headers } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server Error');
+    return data;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      console.log('Fetch aborted:', endpoint);
+      return new Promise(() => {}); // Return a never-resolving promise to stop further execution in the caller
+    }
+    throw err;
+  }
 }
 
 async function uploadMedia(file) {
@@ -72,6 +83,12 @@ function roleBadge(r){
 function catIcon(c){return{'ไฟฟ้า':'⚡','ประปา':'💧','โครงสร้าง':'🏗️','อุปกรณ์อิเล็กทรอนิกส์':'💻','เครื่องปรับอากาศ':'❄️'}[c]||'🔧';}
 function roleTH(r){return{admin:'ผู้ดูแลระบบ',manager:'ผู้จัดการ',technician:'ช่างซ่อม',user:'ผู้ใช้งาน'}[r]||r;}
 function loadingState(){return`<div class="loading-state"><div class="spinner"></div><span class="text-muted">กำลังโหลด...</span></div>`;}
+function setLoading(viewName, navId) {
+  if (viewName === CURRENT_VIEW && (navId === undefined || navId === LATEST_NAV_ID)) {
+    const container = document.getElementById('page-content');
+    if (container) container.innerHTML = loadingState();
+  }
+}
 function emptyState(i,t){return`<div class="empty"><div class="ei">${i}</div><div>${t}</div></div>`;}
 
 function toast(msg,type='ok'){
@@ -210,6 +227,10 @@ function toggleSidebar() {
 /* ═══════════════════════════════════════
    SPA NAVIGATION
 ═══════════════════════════════════════ */
+let CURRENT_VIEW = ''; // ติดตามหน้าที่กำลังแสดงผลอยู่ปัจจุบัน
+let LATEST_NAV_ID = 0; // ลำดับคำสั่งการนำทางล่าสุด
+let NAV_ABORT_CONTROLLER = null; // ตัวจัดการการยกเลิก Request สำหรับหน้าเก่า
+
 function switchPage(page, params = {}) {
   let url = new URL(window.location);
   url.searchParams.set('view', page);
@@ -231,6 +252,13 @@ function renderCurrentPage() {
     window.history.replaceState(null,'',url.toString());
   }
 
+  CURRENT_VIEW = vp; // อัปเดตหน้าที่ผู้ใช้พยายามจะเปิดอยู่ปัจจุบัน
+  
+  // Abort previous navigation requests and start a new one
+  if (NAV_ABORT_CONTROLLER) NAV_ABORT_CONTROLLER.abort();
+  NAV_ABORT_CONTROLLER = new AbortController();
+  const navId = ++LATEST_NAV_ID;
+
   // update sidebar highlight
   document.querySelectorAll('.sb-link').forEach(el=>el.classList.remove('on'));
   const l=document.querySelector(`.sb-link[data-page="${vp}"]`);
@@ -241,25 +269,41 @@ function renderCurrentPage() {
   const tEl=document.getElementById('page-title');
   if(tEl) tEl.textContent=titles[vp]||'ระบบแจ้งซ่อม';
 
-  // route
-  if(vp==='dashboard' && typeof pageDashboard==='function') pageDashboard();
-  else if(vp==='requests-list' && typeof pageRequestsList==='function') pageRequestsList(Object.fromEntries(new URLSearchParams(window.location.search)));
-  else if(vp==='request-new' && typeof pageNewRequest==='function') pageNewRequest();
+  // route - Pass navId to all page functions
+  if(vp==='dashboard' && typeof pageDashboard==='function') pageDashboard(navId);
+  else if(vp==='requests-list' && typeof pageRequestsList==='function') pageRequestsList(Object.fromEntries(new URLSearchParams(window.location.search)), navId);
+  else if(vp==='request-new' && typeof pageNewRequest==='function') pageNewRequest(navId);
   else if(vp==='request-detail' && typeof pageRequestDetail==='function') {
     const id = new URLSearchParams(window.location.search).get('id');
-    pageRequestDetail(id);
+    pageRequestDetail(id, navId);
   }
-  else if(vp==='materials' && typeof pageMaterials==='function') pageMaterials();
-  else if(vp==='schedule' && typeof pageSchedule==='function') pageSchedule();
-  else if(vp==='reports' && typeof pageReports==='function') pageReports();
-  else if(vp==='users' && typeof pageUsers==='function') pageUsers();
-  else if(vp==='system-log' && typeof pageSystemLog==='function') pageSystemLog();
-  else if(vp==='notif-settings' && typeof pageNotifSettings==='function') pageNotifSettings();
-  else if(vp==='settings' && typeof pageSettings==='function') pageSettings();
-  else if(vp==='track' && typeof pageTrack==='function') pageTrack();
-  else if(vp==='profile' && typeof pageProfile==='function') pageProfile();
+  else if(vp==='materials' && typeof pageMaterials==='function') pageMaterials(navId);
+  else if(vp==='schedule' && typeof pageSchedule==='function') pageSchedule(navId);
+  else if(vp==='reports' && typeof pageReports==='function') pageReports(navId);
+  else if(vp==='users' && typeof pageUsers==='function') pageUsers(navId);
+  else if(vp==='system-log' && typeof pageSystemLog==='function') pageSystemLog(navId);
+  else if(vp==='notif-settings' && typeof pageNotifSettings==='function') pageNotifSettings(navId);
+  else if(vp==='settings' && typeof pageSettings==='function') pageSettings(navId);
+  else if(vp==='track' && typeof pageTrack==='function') pageTrack(navId);
+  else if(vp==='profile' && typeof pageProfile==='function') pageProfile(navId);
   else {
     document.getElementById('page-content').innerHTML = emptyState('⚠️', 'ไม่พบหน้านี้ หรือคุณไม่มีสิทธิ์เข้าถึง');
+  }
+}
+
+/**
+ * ฟังก์ชันกลางสำหรับการตรวจสอบและเรนเดอร์เนื้อหาหน้าจอ
+ * ป้องกันปัญหา Race Condition เมื่อมีการเปลี่ยนหน้าเร็วๆ
+ */
+function renderContent(html, viewName, navId) {
+  // ตรวจสอบทั้งชื่อวิว และรหัสการนำทางล่าสุด
+  if (viewName !== CURRENT_VIEW || (navId !== undefined && navId !== LATEST_NAV_ID)) {
+    console.warn(`Race condition prevented: ignored render for [${viewName}] (navId: ${navId}, latest: ${LATEST_NAV_ID})`);
+    return;
+  }
+  const container = document.getElementById('page-content');
+  if (container) {
+    container.innerHTML = html;
   }
 }
 

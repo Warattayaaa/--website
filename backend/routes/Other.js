@@ -2,6 +2,21 @@ const express = require('express');
 const { db, Timestamp } = require('../db/database');
 const { authenticate, authorize } = require('../middleware/auth');
 
+// 📦 Recursive utility to convert all Timestamps to ISO Strings
+function serializeTimestamps(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (data instanceof Timestamp) return data.toDate().toISOString();
+  if (Array.isArray(data)) return data.map(serializeTimestamps);
+  
+  const result = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      result[key] = serializeTimestamps(data[key]);
+    }
+  }
+  return result;
+}
+
 /* ====== MATERIALS ====== */
 const materialRouter = express.Router();
 
@@ -64,14 +79,56 @@ materialRouter.delete('/:id', authenticate, authorize('admin','manager'), async 
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
+materialRouter.patch('/:id/stock', authenticate, authorize('admin','manager','technician'), async (req, res) => {
+  try {
+    const { action, amount, reason } = req.body;
+    const qty = Number(amount);
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'จำนวนไม่ถูกต้อง' });
+    
+    const ref = db.collection('materials').doc(req.params.id);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'ไม่พบวัสดุ' });
+    
+    const matData = doc.data();
+    const currentQty = matData.quantity || 0;
+    const newQty = action === 'add' ? currentQty + qty : currentQty - qty;
+    
+    if (newQty < 0) return res.status(400).json({ error: 'จำนวนวัสดุในคลังไม่เพียงพอ' });
+    
+    await ref.update({ quantity: newQty });
+    
+    // Log action (SRS 2.9 - Material Audit Trail)
+    await db.collection('audit_logs').add({
+      user_id: String(req.user.id),
+      action: action === 'add' ? 'STOCK_IN' : 'STOCK_OUT',
+      target_table: 'materials',
+      target_id: req.params.id,
+      detail: `${action === 'add' ? 'รับเข้า' : 'เบิกออก'} ${qty} ${matData.unit || 'ชิ้น'} | วัสดุ: ${matData.name} | คงเหลือใหม่: ${newQty} | หมายเหตุ: ${reason || '-'}`,
+      created_at: Timestamp.now()
+    });
+    
+    res.json({ message: 'อัปเดตสต็อกสำเร็จ', quantity: newQty });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 materialRouter.post('/:id/stock-in', authenticate, authorize('admin','manager','technician'), async (req, res) => {
   try {
     const qty = Number(req.body.quantity);
-    if (!qty || qty <= 0) return res.status(400).json({error:'จำนวนไม่ถูกต้อง'});
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({error:'จำนวนไม่ถูกต้อง'});
     const ref = db.collection('materials').doc(req.params.id);
     const doc = await ref.get();
     if (!doc.exists) return res.status(404).json({error:'ไม่พบวัสดุ'});
-    await ref.update({ quantity: doc.data().quantity + qty });
+    const matData = doc.data();
+    const newQty = (matData.quantity || 0) + qty;
+    await ref.update({ quantity: newQty });
+    
+    // Log action
+    await db.collection('audit_logs').add({
+      user_id: String(req.user.id), action: 'STOCK_IN', target_table: 'materials', target_id: req.params.id,
+      detail: `รับเข้า: ${qty} ${matData.unit || 'ชิ้น'} | วัสดุ: ${matData.name} | คงเหลือ: ${newQty}`,
+      created_at: Timestamp.now()
+    });
+    
     res.json({ message:'รับเข้าคลังสำเร็จ' });
   } catch(e){ res.status(500).json({error:e.message}); }
 });
@@ -161,7 +218,7 @@ dashRouter.get('/', authenticate, authorize('manager','admin'), async (req, res)
     const reqs = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     const evals = evalSnap.docs.map(d => d.data());
     const techMap = {};
-    uSnap.docs.forEach(d => { const u=d.data(); if(u.role==='technician') techMap[d.id]=u.name||u.email; });
+    uSnap.docs.forEach(d => { const u=d.data(); techMap[d.id]=u.name||u.email; });
     const total = {
       total: reqs.length,
       pending: reqs.filter(r=>r.status==='รอดำเนินการ').length,
@@ -215,31 +272,27 @@ dashRouter.get('/tech', authenticate, async (req, res) => {
   try {
     const uid = String(req.user.id);
     const [rSnap, matSnap, evalSnap] = await Promise.all([
-      db.collection('repair_requests').get(),
+      db.collection('repair_requests').where('assigned_tech_id', '==', uid).get(),
       db.collection('materials').get(),
       db.collection('evaluations').get()
     ]);
-    const allReqs = rSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const myReqs = allReqs.filter(r=>(r.assigned_to===uid||r.assigned_tech_id===uid));
+    const myReqs = rSnap.docs.map(d=>({id:d.id,...d.data()}));
+
+    // Today's general tasks (might still need broad fetch or specific query)
     const today = new Date(); today.setHours(0,0,0,0);
-    const todayReqs = allReqs.filter(r=>{
-      if(r.status==='เสร็จสมบูรณ์') return false;
-      const ts = r.created_at?.toDate?r.created_at.toDate():new Date(r.created_at); return ts>=today;
-    });
+    const tSnap = await db.collection('repair_requests').where('created_at', '>=', Timestamp.fromDate(today)).get();
+    const todayReqs = tSnap.docs.map(d=>({id:d.id,...d.data()})).filter(r => r.status !== 'เสร็จสมบูรณ์');
     const myEvals = evalSnap.docs.map(d=>d.data()).filter(e=>myReqs.find(r=>r.id===e.request_id));
     const avgScore = myEvals.length?+(myEvals.reduce((s,e)=>s+Number(e.avg_score||0),0)/myEvals.length).toFixed(1):0;
     const mats = matSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const convert = r=>{
-      if(r.created_at?.toDate) r.created_at=r.created_at.toDate().toISOString();
-      if(r.sla_deadline?.toDate) r.sla_deadline=r.sla_deadline.toDate().toISOString(); return r;
-    };
-    myReqs.forEach(convert); todayReqs.forEach(convert);
+    
+    // Proactive Alerts for Tech (Keep as Timestamps for calculation)
     // Proactive Alerts for Tech
     const now = Date.now();
     const riskThreshold = now + (4 * 60 * 60 * 1000); // 4 hours
     const at_risk_sla_items = myReqs.filter(r => r.status !== 'เสร็จสมบูรณ์' && r.sla_deadline && r.sla_deadline.toMillis() > now && r.sla_deadline.toMillis() <= riskThreshold);
 
-    res.json({
+    const results = {
       stats: { today: todayReqs.length, in_progress: myReqs.filter(r=>r.status==='กำลังดำเนินการ').length,
         done: myReqs.filter(r=>r.status==='เสร็จสมบูรณ์').length, total: myReqs.length, avg_score: avgScore, eval_count: myEvals.length },
       at_risk_sla_items,
@@ -248,7 +301,8 @@ dashRouter.get('/tech', authenticate, async (req, res) => {
       review_tasks: myReqs.filter(r=>r.status==='รอตรวจสอบ').slice(0,5),
       completed_history: myReqs.filter(r=>r.status==='เสร็จสมบูรณ์').slice(0,5),
       low_materials: mats.filter(m=>(m.quantity||0)<=(m.reorder_point||5)).slice(0,5)
-    });
+    };
+    res.json(serializeTimestamps(results));
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
@@ -260,25 +314,23 @@ dashRouter.get('/user', authenticate, async (req, res) => {
       db.collection('repair_requests').where('requester_id','==',uid).get(),
       db.collection('evaluations').where('evaluator_id','==',uid).get()
     ]);
-    const myReqs = rSnap.docs.map(d=>{
-      const r={id:d.id,...d.data()};
-      if(r.created_at?.toDate) r.created_at=r.created_at.toDate().toISOString();
-      if(r.sla_deadline?.toDate) r.sla_deadline=r.sla_deadline.toDate().toISOString();
-      if(r.updated_at?.toDate) r.updated_at=r.updated_at.toDate().toISOString();
-      return r;
-    }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const myReqs = rSnap.docs.map(d=>({id:d.id,...d.data()}));
     const myEvals = evalSnap.docs.map(d=>d.data());
     const doneReqs = myReqs.filter(r=>r.status==='เสร็จสมบูรณ์');
     const avgWait = doneReqs.length ? doneReqs.reduce((s,r)=>{
-      return s+(r.updated_at&&r.created_at?(new Date(r.updated_at)-new Date(r.created_at))/3600000:0);
+      const created = r.created_at?.toMillis ? r.created_at.toMillis() : new Date(r.created_at).getTime();
+      const updated = r.updated_at?.toMillis ? r.updated_at.toMillis() : new Date(r.updated_at).getTime();
+      return s + (updated && created ? (updated - created) / 3600000 : 0);
     },0)/doneReqs.length : 0;
-    res.json({
+
+    const results = {
       stats: { total: myReqs.length, pending: myReqs.filter(r=>r.status==='รอดำเนินการ').length,
         in_progress: myReqs.filter(r=>['กำลังดำเนินการ','รอตรวจสอบ'].includes(r.status)).length,
         done: doneReqs.length, avg_wait_hours: +avgWait.toFixed(1), already_evaluated: myEvals.length },
       active: myReqs.filter(r=>r.status!=='เสร็จสมบูรณ์'),
       history: doneReqs.slice(0,10)
-    });
+    };
+    res.json(serializeTimestamps(results));
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
@@ -677,12 +729,25 @@ systemRouter.post('/reset', authenticate, authorize('admin'), async (req, res) =
   try {
     const collections = ['repair_requests', 'materials', 'evaluations', 'audit_logs', 'notifications', 'leaves', 'oncall'];
     
-    // Batch delete (caution: Firestore limits batch size to 500)
+    // Batch delete with counter (Limit: 400 to be safe)
     for (const coll of collections) {
       const snap = await db.collection(coll).get();
-      const batch = db.batch();
-      snap.docs.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
+      let batch = db.batch();
+      let count = 0;
+
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        count++;
+
+        if (count >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          count = 0;
+        }
+      }
+      
+      // Commit remaining
+      if (count > 0) await batch.commit();
     }
 
     // Re-log the reset action itself

@@ -72,7 +72,6 @@
 - **Authentication:** ระบบ JWT (JSON Web Token) พร้อมการเข้ารหัสรหัสผ่านด้วย BCrypt
 - **HTTP Security:** ติดตั้ง Helmet Middleware ป้องกันช่องโหว่พื้นฐาน (XSS, Clickjacking)
 - **Database Security:** ตั้งค่า Firestore Security Rules เป็น "Deny All" (บล็อกการเข้าถึงตรงจาก client)
-- **Rate Limiting:** ป้องกันการ Brute-force Login และการเรียก API ซ้ำซ้อน
 
 ---
 

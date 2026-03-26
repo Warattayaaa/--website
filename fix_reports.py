@@ -1,9 +1,11 @@
-/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
+import base64
+content = """/* UTF-8 Content Thai Support: สวัสดีชาวโลก */
 /* ═══════════════════════════════════════
    PAGE: REPORTS (SRS 2.8 - Full)
 ═══════════════════════════════════════ */
-async function pageReports(navId){
-  setLoading('reports', navId);
+async function pageReports(){
+  const c=document.getElementById('page-content');
+  c.innerHTML=loadingState();
   try {
     const [summary, reqData] = await Promise.all([
       apiFetch('/reports/summary'),
@@ -33,7 +35,7 @@ async function pageReports(navId){
       <!-- KPI row -->
       <div class="stats-grid mb2">
         ${[
-          ['📋',T.total,'แจ้งซ่อมทั้งหมด','c-blue'],
+          ['��',T.total,'แจ้งซ่อมทั้งหมด','c-blue'],
           ['✅',T.done,'เสร็จสมบูรณ์','c-green'],
           ['⏳',T.pending,'รอดำเนินการ','c-amber'],
           ['📈',T.success_rate+'%','อัตราสำเร็จ','c-green'],
@@ -208,7 +210,7 @@ async function pageReports(navId){
           <div style="display:flex;gap:.5rem">
             <button class="btn btn-ghost btn-sm" onclick="exportCSV('stock-table','รายงานสต็อกวัสดุ')">⬇️ CSV</button>
             <button class="btn btn-success btn-sm" onclick="exportExcel('stock-table','รายงานสต็อกวัสดุ')">📗 Excel</button>
-            <button class="btn btn-primary btn-sm" onclick="printSection('rpt-materials','รายงานคลังวัสดุ')">🖨️ PDF</button>
+            <button class="btn btn-primary btn-sm" onclick="printSection('rpt-materials','รายงานคลังวัสดุ')">��️ PDF</button>
           </div>
         </div>
         <div class="tw"><table id="stock-table">
@@ -329,8 +331,8 @@ async function pageReports(navId){
           </tbody>
         </table></div>
       </div>
-    </div>`, 'reports', navId);
-  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'reports', navId); }
+    </div>`, 'reports');
+  } catch(e) { renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'reports'); }
 }
 
 function switchRptTab(btn, tab) {
@@ -342,41 +344,44 @@ function switchRptTab(btn, tab) {
   });
 }
 
+/* ─── Export Excel (.xlsx) ─── */
 function exportExcel(tableId, filename) {
   const table = document.getElementById(tableId);
   if(!table){ toast('ไม่พบตารางข้อมูล','err'); return; }
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.table_to_sheet(table);
   XLSX.utils.book_append_sheet(wb, ws, "Report");
-  const d = new Date().toLocaleDateString('th-TH').replace(/\//g,'-');
-  XLSX.writeFile(wb, `${filename}_${d}.xlsx`);
+  const d = new Date().toLocaleDateString('th-TH').replace(/\\\\//g,'-');
+  XLSX.writeFile(wb, \`\${filename}_\${d}.xlsx\`);
   toast('ดาวน์โหลด Excel เรียบร้อย ✅');
 }
 
+/* ─── Export CSV ─── */
 function exportCSV(tableId, filename) {
   const table = document.getElementById(tableId);
   if(!table){ toast('ไม่พบตารางข้อมูล','err'); return; }
   const rows = [...table.querySelectorAll('tr')];
   const csv = rows.map(r =>
     [...r.querySelectorAll('th,td')].map(cell => {
-      const text = cell.innerText.replace(/\n/g,' ').trim();
-      return `"${text.replace(/"/g,'""')}"`;
+      const text = cell.innerText.replace(/\\\\n/g,' ').trim();
+      return \`"\${text.replace(/"/g,'""')}"\`;
     }).join(',')
-  ).join('\n');
-  const blob = new Blob(['\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
+  ).join('\\\\n');
+  const blob = new Blob(['\\\\uFEFF'+csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href=url; a.download=`${filename}_${new Date().toLocaleDateString('th-TH').replace(/\//g,'-')}.csv`;
+  a.href=url; a.download=\`\${filename}_\${new Date().toLocaleDateString('th-TH').replace(/\\\\//g,'-')}.csv\`;
   a.click(); URL.revokeObjectURL(url);
   toast('ดาวน์โหลด CSV เรียบร้อย ✅');
 }
 
+/* ─── Print / PDF ─── */
 function printSection(sectionId, title) {
   const section = document.getElementById(sectionId);
   if(!section){ toast('ไม่พบส่วนข้อมูล','err'); return; }
   const win = window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head>
-    <meta charset="utf-8"><title>${title}</title>
+  win.document.write(\`<!DOCTYPE html><html><head>
+    <meta charset="utf-8"><title>\${title}</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
       *{margin:0;padding:0;box-sizing:border-box;}
@@ -408,10 +413,12 @@ function printSection(sectionId, title) {
       @media print{body{padding:0;}}
     </style>
   </head><body>
-    <h1>${title}</h1>
-    <div class="rpt-meta">ออกรายงาน ณ วันที่ ${new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})} • ระบบแจ้งซ่อม SDDI-2025</div>
-    ${section.innerHTML}
-    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
-  </body></html>`);
+    <h1>\${title}</h1>
+    <div class="rpt-meta">ออกรายงาน ณ วันที่ \${new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})} • ระบบแจ้งซ่อม SDDI-2025</div>
+    \${section.innerHTML}
+    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}<\/script>
+  </body></html>\`);
   win.document.close();
-}
+}"""
+with open("public/js/Reports.js", "wb") as f:
+    f.write(content.encode("utf-8"))

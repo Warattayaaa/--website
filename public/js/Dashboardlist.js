@@ -1,19 +1,18 @@
 /* ═══════════════════════════════════════
    PAGE: DASHBOARD — router by role
 ═══════════════════════════════════════ */
-async function pageDashboard(){
+async function pageDashboard(navId){
   const role = APP.user?.role;
-  if(role==='technician') return pageDashboardTech();
-  if(role==='user') return pageDashboardUser();
-  return pageDashboardAdmin();
+  if(role==='technician') return pageDashboardTech(navId);
+  if(role==='user') return pageDashboardUser(navId);
+  return pageDashboardAdmin(navId);
 }
 
 /* ──────────────────────────────────────
    ADMIN / MANAGER DASHBOARD (SRS 2.7.2)
 ──────────────────────────────────────── */
-async function pageDashboardAdmin(){
-  const c=document.getElementById('page-content');
-  c.innerHTML = loadingState();
+async function pageDashboardAdmin(navId){
+  setLoading('dashboard', navId);
   try {
     const data = await apiFetch('/dashboard');
     const tot = data.total;
@@ -27,7 +26,7 @@ async function pageDashboardAdmin(){
     const atRisk = data.at_risk_sla_items || [];
     const lowStock = data.low_stock_items || [];
 
-    c.innerHTML=`
+    renderContent(`
     ${(atRisk.length || lowStock.length) ? `
       <div class="mb2" style="display:flex;flex-direction:column;gap:.75rem">
         ${atRisk.map(r => `<div class="alert al-warn" style="display:flex;justify-content:space-between;align-items:center">
@@ -109,23 +108,22 @@ async function pageDashboardAdmin(){
           </tr>`;
         }).join('')||'<tr><td colspan="5">'+emptyState('👷','ไม่มีข้อมูล')+'</td></tr>'}</tbody>
       </table></div>
-    </div>`;
-  } catch(e){ c.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`; }
+    </div>`, 'dashboard', navId);
+  } catch(e){ renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'dashboard', navId); }
 }
 
 /* ──────────────────────────────────────
    TECHNICIAN DASHBOARD (SRS 2.7.3)
 ──────────────────────────────────────── */
-async function pageDashboardTech(){
-  const c=document.getElementById('page-content');
-  c.innerHTML=loadingState();
+async function pageDashboardTech(navId){
+  setLoading('dashboard', navId);
   try {
     const data = await apiFetch('/dashboard/tech');
     const S = data.stats;
 
     const atRisk = data.at_risk_sla_items || [];
 
-    c.innerHTML=`
+    renderContent(`
     ${atRisk.length ? `
       <div class="mb2">
         ${atRisk.map(r => `<div class="alert al-warn" style="display:flex;justify-content:space-between;align-items:center">
@@ -233,7 +231,7 @@ async function pageDashboardTech(){
               <div style="font-size:.8rem;font-weight:600">${m.name}</div>
               <div class="text-xs text-muted">${m.code||''} • ${m.category||'–'}</div>
             </div>
-            <div class="flex ic gap2">
+            <div class="flex ic มั่นใจ gap2">
               <span class="badge b-red">${m.quantity||0} ${m.unit||'ชิ้น'}</span>
               <span class="text-xs text-muted">/ ${m.reorder_point||5}</span>
             </div>
@@ -257,21 +255,20 @@ async function pageDashboardTech(){
         </tr>`).join('')}
         </tbody>
       </table></div>
-    </div>` : ''}`;
-  } catch(e){ c.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`; }
+    </div>` : ''}`, 'dashboard', navId);
+  } catch(e){ renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'dashboard', navId); }
 }
 
 /* ──────────────────────────────────────
    USER DASHBOARD (SRS 2.7.4)
 ──────────────────────────────────────── */
-async function pageDashboardUser(){
-  const c=document.getElementById('page-content');
-  c.innerHTML=loadingState();
+async function pageDashboardUser(navId){
+  setLoading('dashboard', navId);
   try {
     const data = await apiFetch('/dashboard/user');
     const S = data.stats;
 
-    c.innerHTML=`
+    renderContent(`
     <!-- Greeting -->
     <div style="margin-bottom:1.25rem">
       <div style="font-size:1.1rem;font-weight:700">👋 สวัสดี, ${APP.user.name}</div>
@@ -363,6 +360,6 @@ async function pageDashboardUser(){
         </tr>`).join('')}
         </tbody>
       </table></div>
-    </div>` : ''}`;
-  } catch(e){ c.innerHTML=`<div class="alert al-danger">❌ ${e.message}</div>`; }
+    </div>` : ''}`, 'dashboard', navId);
+  } catch(e){ renderContent(`<div class="alert al-danger">❌ ${e.message}</div>`, 'dashboard', navId); }
 }
